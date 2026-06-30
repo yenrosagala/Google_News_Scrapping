@@ -68,20 +68,34 @@ def bersihkan_teks_html(raw_text):
     return plain_text
 
 
-def ekstrak_isi_berita_aman(url_google_news, fallback_text=""):
+def ekstrak_isi_berita_aman(url_google_news, fallback_text="", judul=""):
+    hasil_teks = ""
     try:
         artikel = Article(url_google_news, language="id", keep_article_html=False)
         artikel.download()
         artikel.parse()
-        hasil_teks = artikel.text.strip()
-    except Exception as e:
+
+        for kandidat in [getattr(artikel, "summary", ""), getattr(artikel, "text", "")]:
+            teks = (kandidat or "").strip()
+            if not teks:
+                continue
+            if len(teks) < 40:
+                continue
+            if judul and teks.lower() == judul.lower():
+                continue
+            hasil_teks = teks
+            break
+    except Exception:
         hasil_teks = ""
 
-    if not hasil_teks or len(hasil_teks) < 50:
-        fallback_text = bersihkan_teks_html(fallback_text or "")
+    fallback_text = bersihkan_teks_html(fallback_text or "")
+    if not hasil_teks or len(hasil_teks) < 40:
         if fallback_text:
             return fallback_text
+        if judul:
+            return f"[Gagal Ekstrak]: {judul}"
         return "[Gagal Ekstrak]: Teks terlalu pendek atau dilindungi paywall"
+
     return hasil_teks
 
 
@@ -178,7 +192,7 @@ def run_scraper_pipeline(keyword, progress_bar, status_text):
             article_title=judul,
             summary_text=summary_text,
         )
-        isi_konten = ekstrak_isi_berita_aman(url_berita_target, fallback_text=summary_text)
+        isi_konten = ekstrak_isi_berita_aman(url_berita_target, fallback_text=summary_text, judul=judul)
 
         kata_kunci_bersih = keyword.lower().strip()
         if kata_kunci_bersih and not (kata_kunci_bersih in judul.lower() or kata_kunci_bersih in isi_konten.lower()):
