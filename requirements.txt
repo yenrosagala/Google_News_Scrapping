@@ -5,3 +5,4 @@ playwright
 newspaper3k
 wordcloud
 psycopg2-binary
+lxml[html-clean]
