@@ -1,35 +1,11 @@
 [build-system]
-requires = ["setuptools>=61.0.0", "wheel"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "google-news-scrapping"
+name = "google-news-scraper"
 version = "1.0.0"
-description = "Google News Scraping Dashboard with Sentiment Analysis"
-readme = "README.md"
 requires-python = ">=3.9"
-dependencies = [
-    "streamlit==1.35.0",
-    "pandas==2.2.0",
-    "numpy==1.26.4",
-    "newspaper3k==0.12.8",
-    "feedparser==6.0.10",
-    "psycopg2-binary==2.9.9",
-    "lxml==4.9.4",
-    "html5lib==1.1",
-    "beautifulsoup4==4.12.2",
-    "plotly==5.18.0",
-    "googlenewsdecoder==0.2022.6.1",
-    "streamlit-plotly-events==0.0.6",
-    "nltk==3.8.1",
-    "requests==2.31.0",
-    "Pillow==10.1.0",
-    "kaleido==0.2.1",
-]
 
 [tool.uv]
 package = false
-
-[tool.setuptools]
-packages = ["app"]
-
