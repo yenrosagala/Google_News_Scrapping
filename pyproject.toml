@@ -25,3 +25,10 @@ dependencies = [
 
 [tool.uv]
 package = false
+
+[tool.poetry]
+name = "google-news-scrapping"
+version = "0.1.0"
+description = "Google News Scraper App"
+authors = ["Your Name"]
+package-mode = false  # 👈 TAMBAHKAN BARIS INI
