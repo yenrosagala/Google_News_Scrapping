@@ -14,4 +14,4 @@ nltk
 requests
 Pillow
 kaleido
-g4f
+google-genai
