@@ -607,14 +607,66 @@ def render_app():
                 st.write(f"• {insight}")
             
             # ======================================================
-            # EXECUTIVE SUMMARY - Ringkasan Konten Artikel
+            # EXECUTIVE SUMMARY - Ringkasan Konten Berita via g4f Library
             # ======================================================
             st.divider()
             
-            with st.expander("📝 Ringkasan Eksekutif Konten", expanded=False):
-                with st.spinner("🔄 Membuat ringkasan konten artikel..."):
-                    ringkasan = buat_ringkasan_eksekutif(filtered_df, num_sentences=5)
-                    st.info(ringkasan)
+            with st.expander("📝 Ringkasan Eksekutif Konten (g4f Client)", expanded=False):
+                st.markdown("Klik tombol di bawah untuk meminta AI merangkum poin-poin utama berita.")
+                
+                if st.button("✨ Hasilkan Narasi Ringkasan Otomatis", key="generate_g4f_summary"):
+                    with st.spinner("🔄 Sedang menganalisis teks konten seluruh berita..."):
+                        try:
+                            # Import Client resmi dari library g4f
+                            from g4f.client import Client
+                            
+                            # Mengambil maksimal 8-10 berita teratas
+                            sample_texts = filtered_df["isi_konten"].dropna().head(10).tolist()
+                            
+                            if not sample_texts:
+                                st.warning("Tidak ditemukan teks artikel utuh pada kolom 'isi_konten' untuk dirangkum.")
+                            else:
+                                # Menggabungkan korpus berita menjadi satu dokumen prompt
+                                gabungan_berita = ""
+                                for idx, teks in enumerate(sample_texts, 1):
+                                    gabungan_berita += f"\n[ARTIKEL {idx}]\n{teks}\n"
+                                
+                                prompt_instruksi = f"""
+                                Anda adalah seorang analis media profesional yang andal. 
+                                Tugas Anda adalah membaca kumpulan artikel berita di bawah ini dan menyusun sebuah Ringkasan Eksekutif (Executive Summary) yang padat, informatif, dan ringkas dalam Bahasa Indonesia.
+
+                                Poin wajib dalam ringkasan:
+                                1. Topik atau isu utama yang paling mendominasi dari seluruh artikel.
+                                2. Dampak signifikan (ekonomi/lingkungan/sosial) yang dilaporkan.
+                                3. Kesimpulan naratif umum dari tren berita ini.
+
+                                Gunakan format poin-poin markdown yang rapi. Jangan mengada-ada atau memalsukan fakta di luar teks yang diberikan.
+
+                                Berikut data beritanya:
+                                {gabungan_berita}
+                                """
+                                
+                                # Inisialisasi g4f Client sesuai panduan Anda
+                                client = Client()
+                                
+                                # Memanggil completion. Anda bisa menggunakan "gpt-4o", "gemini-flash", atau "llama-3.1-70b"
+                                response = client.chat.completions.create(
+                                    model="gpt-4o",  
+                                    messages=[{"role": "user", "content": prompt_instruksi}],
+                                    web_search=False
+                                )
+                                
+                                # Mengambil teks hasil akhir
+                                ai_response = response.choices[0].message.content
+                                
+                                if ai_response:
+                                    st.info(ai_response)
+                                else:
+                                    st.error("AI mengembalikan respons kosong. Silakan coba klik tombol kembali.")
+                                    
+                        except Exception as e:
+                            st.error(f"Terjadi kegagalan pada g4f Client: {e}")
+                            st.caption("Tip: Jika gagal, ganti parameter `model` ke opsi lain seperti 'gemini-flash' atau 'llama-3.1-70b' yang mungkin sedang memiliki provider aktif lebih stabil.")
         else:
             st.info("Tidak ada data untuk ditampilkan. Lakukan scraping terlebih dahulu.")
 
