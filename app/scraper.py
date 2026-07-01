@@ -9,7 +9,8 @@ import time
 import feedparser
 import pandas as pd
 import requests
-from newspaper import Article, Config
+# MENGGUNAKAN NEWSPAPER4K
+from newspaper import Article, Config 
 # Menggunakan decoder resmi untuk membongkar URL terenkripsi Google
 from googlenewsdecoder import gnewsdecoder 
 
@@ -30,7 +31,7 @@ HTTP_HEADERS = {
     "Accept-Language": "id,en-US;q=0.7,en;q=0.3"
 }
 
-# Inisialisasi Konfigurasi Resmi Newspaper3k untuk Optimasi Kecepatan
+# Inisialisasi Konfigurasi Newspaper4k untuk Optimasi Kecepatan
 NEWSPAPER_CONFIG = Config()
 NEWSPAPER_CONFIG.headers = HTTP_HEADERS
 NEWSPAPER_CONFIG.fetch_images = False      
@@ -101,7 +102,7 @@ def ekstrak_teks_dari_html(raw_html):
 
 
 def ekstrak_isi_berita_aman(url_google_news, fallback_text="", judul_feed="", source_url=""):
-    """Ekstrak teks artikel penuh dari halaman target, dan hanya gunakan fallback bila benar-benar tidak ada teks."""
+    """Ekstrak teks artikel penuh menggunakan Newspaper4k."""
     judul_final = bersihkan_judul_feed(judul_feed)
     isi = ""
     url_target = url_google_news or ""
@@ -125,19 +126,19 @@ def ekstrak_isi_berita_aman(url_google_news, fallback_text="", judul_feed="", so
             if len(teks_html.strip()) >= 200:
                 isi = teks_html.strip()
 
+            # Jika parsing manual kurang memadai, gunakan Newspaper4k dengan HTML lokal
             if not isi:
                 article = Article(url_target, language="id", config=NEWSPAPER_CONFIG)
                 article.set_html(html_text)
-                time.sleep(2)
                 article.parse()
 
                 if article.text and len(article.text.strip()) >= 150:
                     isi = article.text.strip()
 
+            # Jika masih kosong, biarkan Newspaper4k melakukan download secara penuh
             if not isi:
                 article = Article(url_target, language="id", config=NEWSPAPER_CONFIG)
                 article.download()
-                time.sleep(3)
                 article.parse()
 
                 if article.text and len(article.text.strip()) >= 150:
@@ -146,7 +147,7 @@ def ekstrak_isi_berita_aman(url_google_news, fallback_text="", judul_feed="", so
             if article and getattr(article, "title", None) and "Google" not in article.title:
                 judul_final = article.title
     except Exception as e:
-        logging.warning(f"Engine Newspaper3k gagal mengekstrak konten penuh dari {url_target}: {e}")
+        logging.warning(f"Engine Newspaper4k gagal mengekstrak konten penuh dari {url_target}: {e}")
 
     if not isi or len(isi) < 200:
         fallback_text_clean = bersihkan_teks_html(fallback_text)
