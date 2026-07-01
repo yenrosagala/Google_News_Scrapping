@@ -1,62 +1,41 @@
-import base64
 import html
+import logging
 import re
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+import time
 
-import requests
 import feedparser
-from newspaper import Article
+import pandas as pd
+import requests
+from newspaper import Article, Config
+# Menggunakan decoder resmi untuk membongkar URL terenkripsi Google
+from googlenewsdecoder import gnewsdecoder 
 
 from app.database import IS_POSTGRES, dapatkan_koneksi_db
 
+# Konfigurasi Logging Standar Produksi
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def decode_google_news_link(url_google_news, source_url=None, article_title=None, summary_text=None):
-    """Ubah link Google News RSS/encoded/read menjadi URL sumber asli jika memungkinkan."""
-    if not url_google_news:
-        return url_google_news
+# Inisialisasi HTTP Session dengan pooling
+HTTP_SESSION = requests.Session()
+adapter = requests.adapters.HTTPAdapter(pool_connections=25, pool_maxsize=25)
+HTTP_SESSION.mount("http://", adapter)
+HTTP_SESSION.mount("https://", adapter)
 
-    if source_url:
-        parsed_source = urllib.parse.urlparse(source_url)
-        if parsed_source.scheme and parsed_source.netloc:
-            if parsed_source.path in {"", "/"}:
-                if article_title:
-                    slug = re.sub(r"[^a-z0-9]+", "-", article_title.lower()).strip("-")
-                    if slug:
-                        return f"{source_url.rstrip('/')}/{slug}"
-                if summary_text:
-                    summary_slug = re.sub(r"[^a-z0-9]+", "-", summary_text.lower()).strip("-")
-                    if summary_slug:
-                        return f"{source_url.rstrip('/')}/{summary_slug[:80]}"
-            return source_url
+HTTP_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "id,en-US;q=0.7,en;q=0.3"
+}
 
-    parsed = urllib.parse.urlparse(url_google_news)
-    if parsed.netloc not in {"news.google.com", "www.news.google.com"}:
-        return url_google_news
-
-    if parsed.path.startswith("/read/"):
-        return source_url or url_google_news
-
-    if "/rss/articles/" not in parsed.path:
-        return url_google_news
-
-    try:
-        raw_token = parsed.path.split("/rss/articles/", 1)[1].split("?", 1)[0]
-        decoded = base64.urlsafe_b64decode(raw_token + "=" * (-len(raw_token) % 4))
-        decoded_text = decoded.decode("utf-8", errors="ignore")
-
-        matches = re.findall(r"https?://[^\s\"'<>]+", decoded_text)
-        if matches:
-            cleaned = matches[0].rstrip(").,;:")
-            if cleaned.startswith("http"):
-                return cleaned
-            return f"https://{cleaned.lstrip('/')}"
-    except Exception:
-        pass
-
-    if url_google_news.startswith("https://news.google.com/rss/articles/"):
-        return source_url or "https://news.google.com/"
-
-    return url_google_news
+# Inisialisasi Konfigurasi Resmi Newspaper3k untuk Optimasi Kecepatan
+NEWSPAPER_CONFIG = Config()
+NEWSPAPER_CONFIG.headers = HTTP_HEADERS
+NEWSPAPER_CONFIG.fetch_images = False      
+NEWSPAPER_CONFIG.memoize_articles = False  
+NEWSPAPER_CONFIG.request_timeout = 12
 
 
 def bersihkan_teks_html(raw_text):
@@ -68,163 +47,313 @@ def bersihkan_teks_html(raw_text):
     return plain_text
 
 
-def ekstrak_isi_berita_aman(url_google_news, fallback_text="", judul=""):
-    hasil_teks = ""
+def normalisasi_token_kata_kunci(keyword):
+    if not keyword:
+        return []
+    return [token for token in re.sub(r"[^a-z0-9]+", " ", str(keyword).lower()).split() if token]
+
+
+def cocok_dengan_kata_kunci(keyword, judul, isi_konten):
+    kata_kunci_tokens = normalisasi_token_kata_kunci(keyword)
+    if not kata_kunci_tokens:
+        return True
+
+    teks_pencarian = " ".join(filter(None, [judul or "", isi_konten or ""]))
+    teks_tokens = set(normalisasi_token_kata_kunci(teks_pencarian))
+    
+    return any(token in teks_tokens for token in kata_kunci_tokens)
+
+
+def bersihkan_judul_feed(judul):
+    if not judul:
+        return ""
+
+    judul = judul.strip()
+    if " - " in judul:
+        judul = " - ".join(judul.split(" - ")[:-1])
+    return judul
+
+
+def ekstrak_teks_dari_html(raw_html):
+    if not raw_html:
+        return ""
+
+    cleaned_html = re.sub(r"<script.*?</script>", " ", raw_html, flags=re.I | re.S)
+    cleaned_html = re.sub(r"<style.*?</style>", " ", cleaned_html, flags=re.I | re.S)
+
+    paragraphs = []
+    for match in re.finditer(r"<p[^>]*>(.*?)</p>", cleaned_html, flags=re.I | re.S):
+        text = re.sub(r"<[^>]+>", " ", match.group(1))
+        text = html.unescape(text)
+        text = re.sub(r"\s+", " ", text).strip()
+        if len(text) > 40:
+            paragraphs.append(text)
+
+    if paragraphs:
+        joined = "\n\n".join(paragraphs)
+        if len(joined.strip()) >= 200:
+            return joined.strip()
+
+    plain_text = re.sub(r"<[^>]+>", " ", cleaned_html)
+    plain_text = html.unescape(plain_text)
+    plain_text = re.sub(r"\s+", " ", plain_text).strip()
+    return plain_text
+
+
+def ekstrak_isi_berita_aman(url_google_news, fallback_text="", judul_feed="", source_url=""):
+    """Ekstrak teks artikel penuh dari halaman target, dan hanya gunakan fallback bila benar-benar tidak ada teks."""
+    judul_final = bersihkan_judul_feed(judul_feed)
+    isi = ""
+    url_target = url_google_news or ""
+    article = None
+
     try:
-        artikel = Article(url_google_news, language="id", keep_article_html=False)
-        artikel.download()
-        artikel.parse()
+        decoded_url = gnewsdecoder(url_google_news, interval=1, proxy=None)
+        if decoded_url.get("status"):
+            url_target = decoded_url["decoded_url"]
+    except Exception as e:
+        logging.error(f"Eror saat memanggil gnewsdecoder: {e}")
 
-        for kandidat in [getattr(artikel, "summary", ""), getattr(artikel, "text", "")]:
-            teks = (kandidat or "").strip()
-            if not teks:
-                continue
-            if len(teks) < 40:
-                continue
-            if judul and teks.lower() == judul.lower():
-                continue
-            hasil_teks = teks
-            break
+    if "https" in url_target and url_target.count("https://") > 1:
+        url_target = "https://" + url_target.split("https://")[-1]
+
+    try:
+        response = HTTP_SESSION.get(url_target, headers=HTTP_HEADERS, timeout=12)
+        if response.status_code == 200:
+            html_text = response.text
+            teks_html = ekstrak_teks_dari_html(html_text)
+            if len(teks_html.strip()) >= 200:
+                isi = teks_html.strip()
+
+            if not isi:
+                article = Article(url_target, language="id", config=NEWSPAPER_CONFIG)
+                article.set_html(html_text)
+                time.sleep(2)
+                article.parse()
+
+                if article.text and len(article.text.strip()) >= 150:
+                    isi = article.text.strip()
+
+            if not isi:
+                article = Article(url_target, language="id", config=NEWSPAPER_CONFIG)
+                article.download()
+                time.sleep(3)
+                article.parse()
+
+                if article.text and len(article.text.strip()) >= 150:
+                    isi = article.text.strip()
+
+            if article and getattr(article, "title", None) and "Google" not in article.title:
+                judul_final = article.title
+    except Exception as e:
+        logging.warning(f"Engine Newspaper3k gagal mengekstrak konten penuh dari {url_target}: {e}")
+
+    if not isi or len(isi) < 200:
+        fallback_text_clean = bersihkan_teks_html(fallback_text)
+        if len(fallback_text_clean) >= 200:
+            isi = fallback_text_clean
+        else:
+            isi = ""
+
+    return {
+        "judul": judul_final,
+        "isi_konten": isi,
+        "url_target": url_target,
+    }
+
+
+def ambil_teks_ringkasan(entry):
+    if not entry:
+        return ""
+
+    if hasattr(entry, "get"):
+        for key in ("summary", "description", "content", "subtitle"):
+            value = entry.get(key)
+            if isinstance(value, (list, tuple)):
+                for item in value:
+                    if isinstance(item, dict):
+                        nested_value = item.get("value") or item.get("body") or item.get("content")
+                        if nested_value:
+                            return bersihkan_teks_html(str(nested_value))
+                    if item:
+                        return bersihkan_teks_html(str(item))
+            if isinstance(value, dict):
+                for nested_key in ("value", "body", "content"):
+                    nested_value = value.get(nested_key)
+                    if nested_value:
+                        return bersihkan_teks_html(str(nested_value))
+            if value:
+                return bersihkan_teks_html(str(value))
+
+    for attr in ("summary", "description", "content", "text"):
+        value = getattr(entry, attr, None)
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                if item:
+                    return bersihkan_teks_html(str(item))
+        if value:
+            return bersihkan_teks_html(str(value))
+
+    return ""
+
+
+def proses_tunggal_item(entry, keyword_bersih):
+    judul_raw = entry.get("title", "")
+    link_asli = entry.get("link", "")
+
+    if not judul_raw or not judul_raw.strip() or not link_asli:
+        return None
+
+    judul = bersihkan_judul_feed(judul_raw)
+
+    source_obj = entry.get("source")
+    media = source_obj.get("title", "Tidak ditemukan") if source_obj and "title" in source_obj else "Tidak ditemukan"
+
+    waktu_tampilan = entry.get("published", "Tidak ditemukan")
+    try:
+        dt = datetime.strptime(waktu_tampilan, "%a, %d %b %Y %H:%M:%S %Z")
+        waktu_iso = dt.isoformat()
     except Exception:
-        hasil_teks = ""
+        waktu_iso = datetime.utcnow().isoformat()
 
-    fallback_text = bersihkan_teks_html(fallback_text or "")
-    if not hasil_teks or len(hasil_teks) < 40:
-        if fallback_text:
-            return fallback_text
-        if judul:
-            return f"[Gagal Ekstrak]: {judul}"
-        return "[Gagal Ekstrak]: Teks terlalu pendek atau dilindungi paywall"
+    summary_text = ambil_teks_ringkasan(entry)
 
-    return hasil_teks
+    hasil_ekstraksi = ekstrak_isi_berita_aman(
+        url_google_news=link_asli,
+        fallback_text=summary_text,
+        judul_feed=judul,
+    )
+
+    judul_final = hasil_ekstraksi["judul"]
+    isi_konten = hasil_ekstraksi["isi_konten"]
+    link_final = hasil_ekstraksi.get("url_target") or link_asli
+
+    if keyword_bersih and not cocok_dengan_kata_kunci(keyword_bersih, judul_final, isi_konten):
+        return None
+
+    return {
+        "kata_kunci": keyword_bersih,
+        "judul": judul_final,
+        "media": media,
+        "waktu_tampilan": waktu_tampilan,
+        "waktu_iso": waktu_iso,
+        "link": link_final,
+        "isi_konten": isi_konten,
+    }
 
 
 def ambil_feed_google_news(keyword):
-    query = requests.utils.quote(keyword)
+    query = urllib.parse.quote(keyword)
     url = f"https://news.google.com/rss/search?q={query}&hl=id&gl=ID&ceid=ID:id"
-    response = requests.get(
-        url,
-        timeout=20,
-        headers={"User-Agent": "Mozilla/5.0"},
-    )
+    response = HTTP_SESSION.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
     response.raise_for_status()
     return feedparser.parse(response.content)
 
 
-def run_scraper_pipeline(keyword, progress_bar, status_text):
-    conn = dapatkan_koneksi_db()
-    cursor = conn.cursor()
-    jumlah_data_baru = 0
+def run_scraper_pipeline(keyword, on_progress=None, on_status=None):
+    """Pipeline scraper utama yang mendukung multi-keyword dipisahkan koma."""
+    if not keyword or not keyword.strip():
+        if on_status:
+            on_status("⚠️ Keyword pencarian kosong.")
+        return pd.DataFrame()
 
-    try:
-        feed = ambil_feed_google_news(keyword)
-        berita_items = getattr(feed, "entries", []) or []
-    except Exception as e:
-        status_text.text(f"⚠️ Gagal mengambil feed Google News: {e}")
-        conn.close()
-        return 0
+    list_keyword = [k.strip() for k in keyword.split(",") if k.strip()]
+    total_keywords = len(list_keyword)
+    df_gabungan = pd.DataFrame()
+    
+    def update_status(pesan):
+        logging.info(pesan)
+        if on_status:
+            on_status(pesan)
 
-    total_target = len(berita_items)
-    if total_target == 0:
-        status_text.text("⚠️ Tidak ada berita yang ditemukan dari Google News.")
-        conn.close()
-        return 0
-
-    for index, entry in enumerate(berita_items):
-        progress_bar.progress((index + 1) / total_target)
-        judul_raw = getattr(entry, "title", "") or ""
-        if not judul_raw or not judul_raw.strip():
-            continue
-
-        link = getattr(entry, "link", "") or ""
-        if not link:
-            continue
-
-        source_obj = getattr(entry, "source", None)
-        source_url = None
-        if source_obj:
-            source_url = getattr(source_obj, "href", None) or getattr(source_obj, "url", None) or getattr(source_obj, "link", None)
-
-        link_asli = link
-        status_text.text(f"⏳ [{index + 1}/{total_target}] Memeriksa: {judul_raw[:40]}...")
-
-        if IS_POSTGRES:
-            cursor.execute("SELECT 1 FROM artikel WHERE link = %s", (link_asli,))
-        else:
-            cursor.execute("SELECT 1 FROM artikel WHERE link = ?", (link_asli,))
-
-        if cursor.fetchone():
-            continue
-
-        if IS_POSTGRES:
-            cursor.execute(
-                "SELECT id, link FROM artikel WHERE kata_kunci = %s AND judul = %s",
-                (keyword.strip(), judul_raw.strip()),
-            )
-        else:
-            cursor.execute(
-                "SELECT id, link FROM artikel WHERE kata_kunci = ? AND judul = ?",
-                (keyword.strip(), judul_raw.strip()),
-            )
-
-        row_lama = cursor.fetchone()
-        if row_lama:
-            row_id, row_link = row_lama
-            if row_link != link_asli:
-                if IS_POSTGRES:
-                    cursor.execute("UPDATE artikel SET link = %s WHERE id = %s", (link_asli, row_id))
-                else:
-                    cursor.execute("UPDATE artikel SET link = ? WHERE id = ?", (link_asli, row_id))
-            continue
-
-        media = "Tidak ditemukan"
-        if source_obj and hasattr(source_obj, "title"):
-            media = source_obj.title
-
-        waktu_tampilan = getattr(entry, "published", "Tidak ditemukan") or "Tidak ditemukan"
-        waktu_iso = waktu_tampilan
-
-        summary_text = getattr(entry, "summary", "") or ""
-        judul = judul_raw.strip()
-        url_berita_target = decode_google_news_link(
-            link,
-            source_url=source_url,
-            article_title=judul,
-            summary_text=summary_text,
-        )
-        isi_konten = ekstrak_isi_berita_aman(url_berita_target, fallback_text=summary_text, judul=judul)
-
-        kata_kunci_bersih = keyword.lower().strip()
-        if kata_kunci_bersih and not (kata_kunci_bersih in judul.lower() or kata_kunci_bersih in isi_konten.lower()):
-            continue
-
+    for kw_idx, kw_target in enumerate(list_keyword):
+        update_status(f"🔍 [{kw_idx + 1}/{total_keywords}] Memulai pencarian untuk: '{kw_target}'...")
+        
         try:
-            if IS_POSTGRES:
-                cursor.execute(
-                    """
-                    INSERT INTO artikel (kata_kunci, judul, media, waktu_tampilan, waktu_iso, link, isi_konten)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (link) DO NOTHING
-                    """,
-                    (keyword.strip(), judul, media, waktu_tampilan, waktu_iso, link_asli, isi_konten),
-                )
-            else:
-                cursor.execute(
-                    """
-                    INSERT OR IGNORE INTO artikel (kata_kunci, judul, media, waktu_tampilan, waktu_iso, link, isi_konten)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (keyword.strip(), judul, media, waktu_tampilan, waktu_iso, link_asli, isi_konten),
-                )
+            feed = ambil_feed_google_news(kw_target)
+            berita_items = feed.get("entries", []) or []
+        except Exception as e:
+            update_status(f"⚠️ Gagal mengambil feed Google News untuk '{kw_target}': {e}")
+            continue
 
-            if IS_POSTGRES:
-                if cursor.rowcount > 0:
-                    jumlah_data_baru += 1
-            else:
-                if conn.total_changes > 0:
-                    jumlah_data_baru += 1
-        except Exception:
-            pass
+        if not berita_items:
+            update_status(f"ℹ️ Tidak ada berita ditemukan untuk keyword '{kw_target}'.")
+            continue
 
-    conn.commit()
-    conn.close()
-    return jumlah_data_baru
+        conn = dapatkan_koneksi_db()
+        cursor = conn.cursor()
+        links_dari_feed = list({e.get("link", "") for e in berita_items if e.get("link", "")})
+        existing_links = set()
+
+        ukuran_batch = 500
+        for i in range(0, len(links_dari_feed), ukuran_batch):
+            batch_links = links_dari_feed[i:i + ukuran_batch]
+            if IS_POSTGRES:
+                cursor.execute("SELECT link FROM artikel WHERE link = ANY(%s)", (batch_links,))
+            else:
+                format_placeholder = ",".join(["?"] * len(batch_links))
+                cursor.execute(f"SELECT link FROM artikel WHERE link IN ({format_placeholder})", batch_links)
+            existing_links.update(row[0] for row in cursor.fetchall())
+
+        items_to_process = [e for e in berita_items if e.get("link", "") not in existing_links]
+        total_proses = len(items_to_process)
+        
+        if total_proses == 0:
+            update_status(f"✅ Semua berita untuk '{kw_target}' sudah ada di database.")
+            conn.close()
+            continue
+
+        data_siap_simpan = []
+        update_status(f"⏳ [{kw_target}] Mengunduh {total_proses} artikel secara paralel...")
+        
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futu_ke_item = {executor.submit(proses_tunggal_item, item, kw_target): item for item in items_to_process}
+            
+            for index, future in enumerate(as_completed(futu_ke_item)):
+                if on_progress:
+                    base_progress = kw_idx / total_keywords
+                    current_kw_progress = ((index + 1) / total_proses) / total_keywords
+                    on_progress(min(base_progress + current_kw_progress, 1.0))
+                try:
+                    hasil = future.result()
+                    if hasil:
+                        data_siap_simpan.append(hasil)
+                        update_status(f"🚀 [{kw_target}] Konten ditarik: {hasil['judul'][:30]}...")
+                except Exception as exc:
+                    logging.error(f"Error pada thread worker: {exc}")
+
+        if data_siap_simpan:
+            try:
+                if IS_POSTGRES:
+                    query_insert = """
+                        INSERT INTO artikel (kata_kunci, judul, media, waktu_tampilan, waktu_iso, link, isi_konten)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (link) DO NOTHING
+                    """
+                else:
+                    query_insert = """
+                        INSERT OR IGNORE INTO artikel (kata_kunci, judul, media, waktu_tampilan, waktu_iso, link, isi_konten)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """
+                
+                kolom_db = ["kata_kunci", "judul", "media", "waktu_tampilan", "waktu_iso", "link", "isi_konten"]
+                list_tuple_data = [tuple(item[col] for col in kolom_db) for item in data_siap_simpan]
+                
+                for i in range(0, len(list_tuple_data), 100):
+                    cursor.executemany(query_insert, list_tuple_data[i:i + 100])
+                    
+                conn.commit()
+                df_kw = pd.DataFrame(data_siap_simpan)[kolom_db]
+                df_gabungan = pd.concat([df_gabungan, df_kw], ignore_index=True)
+                update_status(f"✅ [{kw_target}] Sukses menyimpan {len(df_kw)} artikel baru.")
+                
+            except Exception as e:
+                logging.error(f"Gagal commit batch ke DB untuk '{kw_target}': {e}")
+                conn.rollback()
+            finally:
+                conn.close()
+        else:
+            conn.close()
+
+    if not df_gabungan.empty:
+        update_status(f"🎉 Semua selesai! Total {len(df_gabungan)} artikel baru dimasukkan dari seluruh keyword.")
+    return df_gabungan

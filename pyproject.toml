@@ -10,6 +10,7 @@ dependencies = [
     "matplotlib",
     "playwright",
     "newspaper3k",
+    "feedparser",
     "wordcloud",
     "psycopg2-binary",
     "lxml[html-clean]",
