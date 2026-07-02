@@ -48,21 +48,24 @@ def bersihkan_teks_html(raw_text):
     return plain_text
 
 
-def normalisasi_token_kata_kunci(keyword):
-    if not keyword:
-        return []
-    return [token for token in re.sub(r"[^a-z0-9]+", " ", str(keyword).lower()).split() if token]
-
-
 def cocok_dengan_kata_kunci(keyword, judul, isi_konten):
-    kata_kunci_tokens = normalisasi_token_kata_kunci(keyword)
-    if not kata_kunci_tokens:
+    """
+    Lapis filter di Python (Hilir):
+    Memastikan frasa keyword yang dicari benar-benar ada secara utuh 
+    (Exact Match) di dalam gabungan teks judul atau isi artikel.
+    """
+    if not keyword:
         return True
 
-    teks_pencarian = " ".join(filter(None, [judul or "", isi_konten or ""]))
-    teks_tokens = set(normalisasi_token_kata_kunci(teks_pencarian))
-    
-    return any(token in teks_tokens for token in kata_kunci_tokens)
+    # Bersihkan spasi ganda dan ubah ke huruf kecil (Case-Insensitive Exact Match)
+    kw_lowercase = " ".join(keyword.strip().lower().split())
+    teks_artikel = " ".join(f"{judul or ''} {isi_konten or ''}".strip().lower().split())
+
+    # Artikel wajib mengandung frasa keyword secara persis berurutan
+    if kw_lowercase not in teks_artikel:
+        return False
+
+    return True
 
 
 def bersihkan_judul_feed(judul):
@@ -244,21 +247,35 @@ def proses_tunggal_item(entry, keyword_bersih):
 
 
 def ambil_feed_google_news(keyword):
-    query = urllib.parse.quote(keyword)
-    url = f"https://news.google.com/rss/search?q={query}&hl=id&gl=ID&ceid=ID:id"
+    """
+    Mengirimkan keyword ke Google News dengan membungkusnya murni menggunakan
+    tanda petik ganda ("") agar menghasilkan pencarian yang EXACT MATCH.
+    """
+    # Bersihkan spasi berlebih di awal, akhir, dan tengah kata kunci
+    kw_clean = " ".join(keyword.strip().split())
+    
+    # Bungkus keyword utuh dalam tanda petik ganda, misal: "bps papua"
+    query_target = f'"{kw_clean}"'
+    
+    logging.info(f"📡 Query Exact Match dikirim ke Google News: {query_target}")
+    
+    # Encode query agar aman dikirim melalui URL RSS Google News
+    query_encoded = urllib.parse.quote(query_target)
+    url = f"https://news.google.com/rss/search?q={query_encoded}&hl=id&gl=ID&ceid=ID:id"
+    
     response = HTTP_SESSION.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
     response.raise_for_status()
     return feedparser.parse(response.content)
 
 
 def run_scraper_pipeline(keyword, on_progress=None, on_status=None):
-    """Pipeline scraper utama yang mendukung multi-keyword (koma) dan sinonim (pipa)."""
+    """Pipeline scraper utama yang mendukung multi-keyword (koma)."""
     if not keyword or not keyword.strip():
         if on_status:
             on_status("⚠️ Keyword pencarian kosong.")
         return pd.DataFrame()
 
-    # 1. Pecah input user berdasarkan koma untuk mendapatkan daftar topik utama
+    # Pecah input user berdasarkan koma untuk mendapatkan daftar topik utama
     list_keyword = [k.strip() for k in keyword.split(",") if k.strip()]
     total_keywords = len(list_keyword)
     df_gabungan = pd.DataFrame()
@@ -269,12 +286,9 @@ def run_scraper_pipeline(keyword, on_progress=None, on_status=None):
             on_status(pesan)
 
     for kw_idx, kw_target in enumerate(list_keyword):
-        # kw_target di sini bisa berupa kata tunggal "papua" 
-        # atau kombinasi sinonim "kecerdasan buatan | AI"
         update_status(f"🔍 [{kw_idx + 1}/{total_keywords}] Memulai pencarian untuk: '{kw_target}'...")
         
         try:
-            # Fungsi ini sekarang otomatis menangani operator OR jika ada tanda '|'
             feed = ambil_feed_google_news(kw_target)
             berita_items = feed.get("entries", []) or []
         except Exception as e:
@@ -312,7 +326,6 @@ def run_scraper_pipeline(keyword, on_progress=None, on_status=None):
         update_status(f"⏳ [{kw_target}] Mengunduh {total_proses} artikel secara paralel...")
         
         with ThreadPoolExecutor(max_workers=8) as executor:
-            # Kirim kw_target (termasuk string sinonimnya jika ada) ke worker thread
             futu_ke_item = {executor.submit(proses_tunggal_item, item, kw_target): item for item in items_to_process}
             
             for index, future in enumerate(as_completed(futu_ke_item)):

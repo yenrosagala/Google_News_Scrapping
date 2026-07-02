@@ -495,7 +495,7 @@ def render_app():
                     
                 target_keyword = st.text_input("Konfirmasi Kata Kunci Analisis:", value=default_keyword)
                 
-                # Filter data berdasarkan keyword target terlebih dahulu
+                # Filter data berdasarkan keyword target
                 filtered_data = filtered_df[filtered_df['kata_kunci'].astype(str).str.contains(target_keyword, case=False, na=False)]
                 
                 if filtered_data.empty:
@@ -505,17 +505,15 @@ def render_app():
                     date_max = filtered_data['waktu_tampilan'].dropna().max()
                     date_range_str = f"{date_min} sampai {date_max}"
                     
-                    # 🟢 KUNCI REVISI: Ubah fungsi cek_cache agar HANYA mencari berdasarkan kata_kunci
+                    # Fungsi cek cache berdasarkan kata kunci di database
                     def cek_cache_summary_hanya_keyword(kata_kunci):
                         from app.database import dapatkan_koneksi_db, IS_POSTGRES
                         try:
                             conn = dapatkan_koneksi_db()
                             cursor = conn.cursor()
                             if IS_POSTGRES:
-                                # Dihapus bagian: AND rentang_waktu = %s
                                 query = "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = %s ORDER BY waktu_dibuat DESC LIMIT 1"
                             else:
-                                # Dihapus bagian: AND rentang_waktu = ?
                                 query = "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = ? ORDER BY waktu_dibuat DESC LIMIT 1"
                             cursor.execute(query, (str(kata_kunci),))
                             row = cursor.fetchone()
@@ -526,122 +524,164 @@ def render_app():
                             return None
                         return None
 
-                    # Jalankan pengecekan tanpa peduli parameter periode
-                    existing_summary = cek_cache_summary_hanya_keyword(target_keyword)
+                    # 🟢 PERBAIKAN UTAMA: Ambil nilai cache terlebih dahulu untuk inisialisasi yang aman
+                    state_key = f"summary_{target_keyword.replace(' ', '_').lower()}"
+                    state_status_key = f"status_{state_key}"
+                    
+                    # Ambil data dari database jika belum ada di session state
+                    if state_key not in st.session_state:
+                        cache_db = cek_cache_summary_hanya_keyword(target_keyword)
+                        st.session_state[state_key] = cache_db
+                        # Inisialisasi status secara eksplisit sejak awal
+                        st.session_state[state_status_key] = "Versi Cache" if cache_db else "Baru"
+                    
+                    # Double check untuk memastikan kunci status SELALU ada (mencegah KeyError)
+                    if state_status_key not in st.session_state:
+                        st.session_state[state_status_key] = "Versi Cache" if st.session_state[state_key] else "Baru"
 
-                    if existing_summary:
-                        # 🟢 JIKA ADA: Langsung tampilkan hasil summary yang tersimpan sebelumnya
-                        st.success(f"### 📊 Executive Summary by AI: {target_keyword}")
-                        st.markdown(existing_summary)
+                    # 🟢 Gunakan satu wadah/container tunggal untuk area judul dan konten summary
+                    area_judul = st.empty()
+                    area_konten = st.empty()
+
+                    # Render tampilan awal (mengambil nilai dari session_state yang sudah pasti aman)
+                    if st.session_state[state_key]:
+                        area_judul.success(f"### 📊 Executive Summary by AI: {target_keyword} ({st.session_state[state_status_key]})")
+                        area_konten.markdown(st.session_state[state_key])
+                        st.write("---")
                     else:
-                        # 🔴 JIKA TIDAK ADA: Tampilkan info & tombol generate yang lama
-                        st.info("💡 Belum ada narasi ringkasan otomatis untuk filter ini di database.")
-                        
+                        area_judul.info("💡 Belum ada narasi ringkasan otomatis untuk filter ini di database.")
+
+                    # Tombol aksi dinamis
+                    trigger_generate = False
+                    if st.session_state[state_key] and st.session_state[state_status_key] == "Versi Cache":
+                        st.info("💡 Data di atas dapat diperbarui dengan menggabungkan artikel historis dan artikel baru hasil scraping.")
+                        if st.button("🔄 Generate Ulang", key="regenerate_gemini_summary"):
+                            trigger_generate = True
+                    elif not st.session_state[state_key]:
                         if st.button("✨ Hasilkan Narasi Ringkasan Otomatis", key="generate_gemini_summary"):
-                            with st.spinner("🔄 Sedang memproses data dan menghubungi Gemini AI..."):
-                                try:
-                                    from google import genai
-                                    client = genai.Client()
-                                    
-                                    t_media = filtered_data['media'].value_counts().head(3)
-                                    t_media_str = ", ".join([f"{m} ({c} artikel)" for m, c in t_media.items()])
-                                    
-                                    clean_df = filtered_data.dropna(subset=['isi_konten', 'judul', 'media'])
-                                    clean_df = clean_df.sample(frac=0.10, random_state=42)
-                                    
-                                    formatted_articles = [
-                                        f"--- ARTIKEL: {row['judul']} ({row['media']}) ---\n{row['isi_konten']}"
-                                        for _, row in clean_df.iterrows()
-                                    ]
-                                    concatenated_content = "\n\n".join(formatted_articles)
-                                    
-                                    if len(concatenated_content) > 100000:
-                                        concatenated_content = concatenated_content[:100000] + "\n\n... [Sisa konten dipotong] ..."
-                                    
-                                    # PROMPT ASLI ANDA (Tidak Diubah)
-                                    prompt_instruksi = f"""
-                                    Judul Tugas: Analisis Berita Eksekutif Komprehensif (Metode Terintegrasi 5W+1H)
+                            trigger_generate = True
 
-                                    Instruksi Utama:
-                                    Buatlah sebuah analisis berita eksekutif yang mendalam dan komprehensif dalam bentuk ESSAI MURNI mengalir (narrative essay). Jangan menggunakan sub-judul kaku untuk masing-masing poin 5W+1H (seperti "WHAT:", "WHO:", dll), melainkan leburkan seluruh unsur tersebut secara organis, mengalir, dan profesional ke dalam paragraf-paragraf esai.
+                    # Proses pembuatan narasi ke Gemini Client
+                    if trigger_generate:
+                        # Ubah status judul komponen menjadi mode memproses
+                        area_judul.info("⏳ Sedang menulis dan memperbarui ringkasan eksekutif baru...")
+                        
+                        try:
+                            from google import genai
+                            client = genai.Client()
+                            
+                            t_media = filtered_data['media'].value_counts().head(3)
+                            t_media_str = ", ".join([f"{m} ({c} artikel)" for m, c in t_media.items()])
+                            
+                            clean_df = filtered_data.dropna(subset=['isi_konten', 'judul', 'media'])
+                            
+                            # Gunakan sampling gabungan jika sebelumnya sudah ada data di database
+                            if st.session_state[state_status_key] == "Versi Cache":
+                                clean_df = clean_df.sample(frac=0.15, random_state=42)
+                                catatan_regenerate = "\n- CATATAN TAMBAHAN: Data ini merupakan gabungan komprehensif dari data historis dan hasil scraping terbaru. Soroti tren pergerakan atau perubahan situasi terbaru jika terdeteksi."
+                            else:
+                                clean_df = clean_df.sample(frac=0.10, random_state=42)
+                                catatan_regenerate = ""
+                            
+                            formatted_articles = [
+                                f"--- ARTIKEL: {row['judul']} ({row['media']}) ---\n{row['isi_konten']}"
+                                for _, row in clean_df.iterrows()
+                            ]
+                            concatenated_content = "\n\n".join(formatted_articles)
+                            
+                            if len(concatenated_content) > 120000:
+                                concatenated_content = concatenated_content[:120000] + "\n\n... [Sisa konten dipotong demi efisiensi konteks] ..."
 
-                                    I. PEDOMAN METADATA & KONTEKS (Wajib ditulis di paragraf pembuka secara natural):
-                                    - Profil Kata Kunci yang Dianalisis: {target_keyword}
-                                    - Cakupan Rentang Tanggal (waktu_tampil): {date_range_str}
-                                    - 3 Kontributor Media Teratas: {t_media_str}
+                            prompt_instruksi = f"""
+                            Judul Tugas: Analisis Berita Eksekutif Komprehensif (Metode Terintegrasi 5W+1H)
 
-                                    II. KERANGKA ESSAI (Integrasikan seluruh poin ini ke dalam narasi esai):
-                                    Berdasarkan kolom isi_konten pada file "news_data_lengkap_20260701_004851.csv", narasikan:
-                                    - Peristiwa utama, pengumuman, kebijakan, atau isu krusial yang dilaporkan terkait tren inflasi.
-                                    - Individu, organisasi, institusi (seperti BI, Pemda, Bulog, BPS) yang terlibat aktif atau terdampak dalam pemberitaan.
-                                    - Linimasa atau waktu terjadinya peristiwa-peristiwa penting tersebut berdasarkan data artikel.
-                                    - Cakupan geografis daerah yang memberikan dampak atau terdampak terbesar di wilayah Papua (seperti Jayapura, Nabire, Keerom, dll).
-                                    - Akar penyebab atau faktor pendorong mengapa situasi inflasi tersebut terjadi (seperti kendala logistik, wabah penyakit ternak, regulasi subsidi).
-                                    - Bagaimana situasi tersebut berkembang saat ini serta bagaimana respons taktis, operasi pasar, atau strategi jangka panjang yang dilakukan oleh pihak berwenang.
+                            Instruksi Utama:
+                            Buatlah sebuah analisis berita eksekutif yang mendalam dan komprehensif dalam bentuk ESSAI MURNI mengalir (narrative essay). Jangan menggunakan sub-judul kaku untuk masing-masing poin 5W+1H (seperti "WHAT:", "WHO:", dll), melainkan leburkan seluruh unsur tersebut secara organis, mengalir, dan profesional ke dalam paragraf-paragraf esai. {catatan_regenerate}
 
-                                    III. KETENTUAN FORMAT & GAYA BAHASA:
-                                    - Gunakan bahasa Indonesia formal, objektif, dan analitis.
-                                    - Gunakan teknik tebal (bolding) pada frasa kunci atau angka penting untuk menjaga scannability (keterbacaan cepat) agar laporan mudah dipahami oleh tingkat eksekutif.
-                                    - Hindari penggunaan poin-poin (bullet points) di bagian inti analisis; pertahaman struktur narasi esai yang padat dan berisi.
+                            I. PEDOMAN METADATA & KONTEKS (Wajib ditulis di paragraf pembuka secara natural):
+                            - Profil Kata Kunci yang Dianalisis: {target_keyword}
+                            - Cakupan Rentang Tanggal (waktu_tampil): {date_range_str}
+                            - 3 Kontributor Media Teratas: {t_media_str}
 
-                                    KORPUS BERITA:
-                                    {concatenated_content}
-                                    """
-                                    
-                                    response_stream = client.models.generate_content_stream(
-                                        model="gemini-2.5-flash",
-                                        contents=prompt_instruksi
-                                    )
-                                    
-                                    full_response_text = []
-                                    
-                                    def generate_stream():
-                                        for chunk in response_stream:
-                                            if chunk.text:
-                                                full_response_text.append(chunk.text)
-                                                yield chunk.text
-                                    
-                                    st.success(f"### 📊 Hasil Analisis Eksekutif: {target_keyword}")
-                                    st.write_stream(generate_stream())
-                                    
-                                    final_text = "".join(full_response_text)
-                                    if final_text:
-                                        # Saat menyimpan, isi parameter periode tetap diisi (misal dengan periode saat ini) agar struktur tabel DB tidak error,
-                                        # namun saat proses cek di atas, kolom tersebut akan diabaikan secara total.
-                                        simpan_summary_ke_db(target_keyword, periode_str, final_text)
-                                        st.rerun()
-                                        
-                                except Exception as e:
-                                    st.error(f"Terjadi kesalahan saat menghubungi API Gemini: {e}")
-        else:
-            st.info("❌ Tidak ada data untuk ditampilkan.")
+                            II. KERANGKA ESSAI (Integrasikan seluruh poin ini ke dalam narasi esai):
+                            Berdasarkan kolom isi_konten pada data gabungan, narasikan:
+                            - Peristiwa utama, pengumuman, kebijakan, atau isu krusial yang dilaporkan terkait tren inflasi.
+                            - Individu, organisasi, institusi (seperti BI, Pemda, Bulog, BPS) yang terlibat aktif atau terdampak dalam pemberitaan.
+                            - Linimasa atau waktu terjadinya peristiwa-peristiwa penting tersebut berdasarkan data artikel.
+                            - Cakupan geografis daerah yang memberikan dampak atau terdampak terbesar di wilayah Papua (seperti Jayapura, Nabire, Keerom, dll).
+                            - Akar penyebab atau faktor pendorong mengapa situasi inflasi tersebut terjadi (seperti kendala logistik, wabah penyakit ternak, regulasi subsidi).
+                            - Bagaimana situasi tersebut berkembang saat ini serta bagaimana respons taktis, operasi pasar, atau strategi jangka panjang yang dilakukan oleh pihak berwenang.
 
-    with tab2:
-        st.subheader("📈 Visualisasi Data")
-        if len(filtered_df) > 0:
-            col1, col2 = st.columns([1, 1], gap="large")
-            with col1:
-                sentimen_count = filtered_df["Sentimen"].value_counts().reset_index()
-                sentimen_count.columns = ["Sentimen", "Jumlah"]
-                fig_sentimen = px.pie(sentimen_count, names="Sentimen", values="Jumlah", title="Distribusi Sentimen", color="Sentimen", color_discrete_map={"Positif": "#4CAF50", "Negatif": "#F44336"}, hole=0.5)
-                fig_sentimen.update_traces(textinfo='percent+label')
-                st.plotly_chart(fig_sentimen, width='stretch')
+                            III. KETENTUAN FORMAT & GAYA BAHASA:
+                            - Gunakan bahasa Indonesia formal, objektif, dan analitis.
+                            - Gunakan teknik tebal (bolding) pada frasa kunci atau angka penting untuk menjaga scannability (keterbacaan cepat) agar laporan mudah dipahami oleh tingkat eksekutif.
+                            - Hindari penggunaan poin-poin (bullet points) di bagian inti analisis; pertahaman struktur narasi esai yang padat dan berisi.
 
-            with col2:
-                top_10_m = filtered_df["media"].value_counts().head(10).reset_index()
-                top_10_m.columns = ["Media", "Jumlah"]
-                fig_media = px.bar(top_10_m, x="Jumlah", y="Media", orientation="h", title="Top 10 Media", color="Jumlah", color_continuous_scale="Blues")
-                fig_media.update_layout(yaxis={'categoryorder': 'total ascending'})
-                st.plotly_chart(fig_media, width='stretch')
+                            KORPUS BERITA:
+                            {concatenated_content}
+                            """
+                            
+                            response_stream = client.models.generate_content_stream(
+                                model="gemini-2.5-flash",
+                                contents=prompt_instruksi
+                            )
+                            
+                            full_response_text = []
+                            
+                            # Bersihkan area konten lama, lalu jalankan live stream ketikan baru
+                            for chunk in response_stream:
+                                if chunk.text:
+                                    full_response_text.append(chunk.text)
+                                    area_konten.markdown("".join(full_response_text))
+                            
+                            final_text = "".join(full_response_text)
+                            if final_text:
+                                # Simpan permanen ke database backend
+                                simpan_summary_ke_db(target_keyword, periode_str, final_text)
+                                
+                                # Update data session state internal Streamlit sebelum rerun
+                                st.session_state[state_key] = final_text
+                                st.session_state[state_status_key] = "Hasil Diperbarui ✨"
+                                
+                                # Timpa ulang komponen judul menjadi warna sukses/hijau dengan label baru
+                                area_judul.success(f"### 📊 Executive Summary by AI: {target_keyword} ({st.session_state[state_status_key]})")
+                                st.toast("✅ Ringkasan berhasil diperbarui!", icon="🚀")
+                                
+                                time.sleep(0.5)
+                                st.rerun()
+                                
+                        except Exception as e:
+                            st.error(f"Terjadi kesalahan saat menghubungi API Gemini: {e}")
 
-            if "tanggal" in filtered_df.columns:
-                berita_per_hari = filtered_df.groupby("tanggal").size().reset_index(name="Jumlah")
-                berita_per_hari["tanggal"] = pd.to_datetime(berita_per_hari["tanggal"])
-                fig_line = px.line(berita_per_hari, x="tanggal", y="Jumlah", title="Jumlah Berita per Hari", markers=True)
-                fig_line.update_traces(line_color="#0078D4")
-                st.plotly_chart(fig_line, width='stretch')
-        else:
-            st.info("Tidak ada data untuk ditampilkan.")
+                        else:
+                            st.info("❌ Tidak ada data untuk ditampilkan.")
+
+                with tab2:
+                    st.subheader("📈 Visualisasi Data")
+                    if len(filtered_df) > 0:
+                        col1, col2 = st.columns([1, 1], gap="large")
+                        with col1:
+                            sentimen_count = filtered_df["Sentimen"].value_counts().reset_index()
+                            sentimen_count.columns = ["Sentimen", "Jumlah"]
+                            fig_sentimen = px.pie(sentimen_count, names="Sentimen", values="Jumlah", title="Distribusi Sentimen", color="Sentimen", color_discrete_map={"Positif": "#4CAF50", "Negatif": "#F44336"}, hole=0.5)
+                            fig_sentimen.update_traces(textinfo='percent+label')
+                            st.plotly_chart(fig_sentimen, width='stretch')
+
+                        with col2:
+                            top_10_m = filtered_df["media"].value_counts().head(10).reset_index()
+                            top_10_m.columns = ["Media", "Jumlah"]
+                            fig_media = px.bar(top_10_m, x="Jumlah", y="Media", orientation="h", title="Top 10 Media", color="Jumlah", color_continuous_scale="Blues")
+                            fig_media.update_layout(yaxis={'categoryorder': 'total ascending'})
+                            st.plotly_chart(fig_media, width='stretch')
+
+                        if "tanggal" in filtered_df.columns:
+                            berita_per_hari = filtered_df.groupby("tanggal").size().reset_index(name="Jumlah")
+                            berita_per_hari["tanggal"] = pd.to_datetime(berita_per_hari["tanggal"])
+                            fig_line = px.line(berita_per_hari, x="tanggal", y="Jumlah", title="Jumlah Berita per Hari", markers=True)
+                            fig_line.update_traces(line_color="#0078D4")
+                            st.plotly_chart(fig_line, width='stretch')
+                    else:
+                        st.info("Tidak ada data untuk ditampilkan.")
 
     with tab3:
         st.subheader("📂 Database Berita")
