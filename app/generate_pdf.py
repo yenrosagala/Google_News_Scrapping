@@ -85,7 +85,7 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
     
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(40, 40, 40)
-    pdf.multi_cell(170, 6, f": {clean_keyword_title}", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.multi_cell(170, 6, f"{clean_keyword_title}", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(2)
 
     pdf.set_font("Helvetica", "I", 9)

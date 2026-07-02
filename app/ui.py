@@ -334,21 +334,18 @@ def render_app():
             filtered_df = filtered_df[mask]
 
         total_berita = len(filtered_df)
-        berita_dengan_isi = filtered_df["isi_konten"].notna().sum()
         jumlah_media = filtered_df["media"].nunique()
         jumlah_keyword = filtered_df["kata_kunci"].nunique()
     else:
-        total_berita, berita_dengan_isi, jumlah_media, jumlah_keyword = 0, 0, 0, 0
+        total_berita, jumlah_media, jumlah_keyword = 0, 0, 0
         filtered_df = pd.DataFrame()
 
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    kpi1, kpi2, kpi3 = st.columns(3)
     with kpi1:
         st.markdown(f'<div class="kpi-box"><div class="kpi-label">📰 Total Berita</div><div class="kpi-value">{total_berita:,}</div></div>', unsafe_allow_html=True)
     with kpi2:
-        st.markdown(f'<div class="kpi-box"><div class="kpi-label">📄 Dengan Isi</div><div class="kpi-value">{berita_dengan_isi:,}</div></div>', unsafe_allow_html=True)
-    with kpi3:
         st.markdown(f'<div class="kpi-box"><div class="kpi-label">🏢 Jumlah Media</div><div class="kpi-value">{jumlah_media:,}</div></div>', unsafe_allow_html=True)
-    with kpi4:
+    with kpi3:
         st.markdown(f'<div class="kpi-box"><div class="kpi-label">🔖 Jumlah Keyword</div><div class="kpi-value">{jumlah_keyword:,}</div></div>', unsafe_allow_html=True)
 
     tab1, tab2, tab3 = st.tabs(["📊 Analisis", "📈 Grafik", "📂 Data"])
@@ -356,6 +353,14 @@ def render_app():
         st.subheader("📋 Ringkasan Eksekutif")
         
         active_keywords = selected_keyword if selected_keyword else []
+
+        # 📊 MENAMPILKAN CAPTION DINAMIS BERDASARKAN ACTIVE KEYWORD
+        if active_keywords:
+            # Menggabungkan list keyword menjadi string cantik dipisahkan oleh tanda buletin/pipa
+            keyword_badge = " • ".join([f"**{kw}**" for kw in active_keywords])
+            st.caption(f"💡 Menampilkan analisis ringkasan eksekutif otomatis berbasis kecerdasan buatan untuk topik pencarian: {keyword_badge}")
+        else:
+            st.caption("ℹ️ Menampilkan kumulatif analisis seluruh database berita (Belum ada filter kata kunci aktif yang dipilih).")
         keyword_str = ", ".join(active_keywords) if active_keywords else "All"
         date_range_str = f"{start_date} sampai {end_date}" if (start_date and end_date) else "all_time"
         periode_str = f"period_{date_range_str}" 
@@ -396,9 +401,7 @@ def render_app():
             if len(top_media) > 0:
                 insights.append(f"📰 Media dominan: {top_media.index[0]} dengan {top_media.values[0]} artikel")
             
-            total_isi = filtered_df["isi_konten"].notna().sum()
-            insights.append(f"📄 {(total_isi / len(filtered_df) * 100):.1f}% berita memiliki isi lengkap")
-            
+                        
             for insight in insights:
                 # 🟢 Mengganti tanda '•' menjadi '-' agar konsisten dengan file generator PDF
                 st.write(f"- {insight}")
