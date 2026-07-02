@@ -22,6 +22,7 @@ from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
 import nltk
 import re
+import time
 
 # Download required NLTK data
 # Download required NLTK data
@@ -524,26 +525,23 @@ def render_app():
                             return None
                         return None
 
-                    # 🟢 PERBAIKAN UTAMA: Ambil nilai cache terlebih dahulu untuk inisialisasi yang aman
+                    # 🟢 INISIALISASI SESSION STATE SECARA AMAN (Mencegah KeyError)
                     state_key = f"summary_{target_keyword.replace(' ', '_').lower()}"
                     state_status_key = f"status_{state_key}"
                     
-                    # Ambil data dari database jika belum ada di session state
                     if state_key not in st.session_state:
                         cache_db = cek_cache_summary_hanya_keyword(target_keyword)
                         st.session_state[state_key] = cache_db
-                        # Inisialisasi status secara eksplisit sejak awal
                         st.session_state[state_status_key] = "Versi Cache" if cache_db else "Baru"
                     
-                    # Double check untuk memastikan kunci status SELALU ada (mencegah KeyError)
                     if state_status_key not in st.session_state:
                         st.session_state[state_status_key] = "Versi Cache" if st.session_state[state_key] else "Baru"
 
-                    # 🟢 Gunakan satu wadah/container tunggal untuk area judul dan konten summary
+                    # 🟢 WADAH TUNGGAL (Placeholder): Judul dan konten akan ditulis langsung di sini
                     area_judul = st.empty()
                     area_konten = st.empty()
 
-                    # Render tampilan awal (mengambil nilai dari session_state yang sudah pasti aman)
+                    # Render tampilan awal dari Session State saat ini
                     if st.session_state[state_key]:
                         area_judul.success(f"### 📊 Executive Summary by AI: {target_keyword} ({st.session_state[state_status_key]})")
                         area_konten.markdown(st.session_state[state_key])
@@ -551,19 +549,18 @@ def render_app():
                     else:
                         area_judul.info("💡 Belum ada narasi ringkasan otomatis untuk filter ini di database.")
 
-                    # Tombol aksi dinamis
+                    # Tombol aksi dinamis berdasarkan status konten
                     trigger_generate = False
                     if st.session_state[state_key] and st.session_state[state_status_key] == "Versi Cache":
                         st.info("💡 Data di atas dapat diperbarui dengan menggabungkan artikel historis dan artikel baru hasil scraping.")
-                        if st.button("🔄 Generate Ulang", key="regenerate_gemini_summary"):
+                        if st.button("🔄 Perbarui & Generate Ulang (Gabungkan Data Lama + Baru)", key="regenerate_gemini_summary"):
                             trigger_generate = True
                     elif not st.session_state[state_key]:
                         if st.button("✨ Hasilkan Narasi Ringkasan Otomatis", key="generate_gemini_summary"):
                             trigger_generate = True
 
-                    
+                    # Proses pembuatan narasi dengan Mekanisme Fallback Model & In-place Replacement
                     if trigger_generate:
-                        # Ubah status judul komponen menjadi mode memproses
                         area_judul.info("⏳ Sedang menulis dan memperbarui ringkasan eksekutif baru...")
                         
                         try:
@@ -575,7 +572,7 @@ def render_app():
                             
                             clean_df = filtered_data.dropna(subset=['isi_konten', 'judul', 'media'])
                             
-                            # Gunakan sampling gabungan jika sebelumnya sudah ada data di database
+                            # Menggunakan porsi sampling gabungan jika sebelumnya sudah ada data lama
                             if st.session_state[state_status_key] == "Versi Cache":
                                 clean_df = clean_df.sample(frac=0.15, random_state=42)
                                 catatan_regenerate = "\n- CATATAN TAMBAHAN: Data ini merupakan gabungan komprehensif dari data historis dan hasil scraping terbaru. Soroti tren pergerakan atau perubahan situasi terbaru jika terdeteksi."
@@ -621,35 +618,60 @@ def render_app():
                             {concatenated_content}
                             """
                             
-                            response_stream = client.models.generate_content_stream(
-                                model="gemini-2.5-flash",
-                                contents=prompt_instruksi
-                            )
+                            # 🔵 STRATEGI CADANGAN MODEL BERANTAI (Rate Limit Fallback)
+                            daftar_model_fallback = [
+                                "gemini-2.5-flash", 
+                                "gemini-3.1-flash-lite",
+                                "gemini-3-flash-preview",
+                                "gemini-2.5-flash-lite"
+                            ]
                             
-                            full_response_text = []
+                            response_stream = None
+                            model_terpilih = None
                             
-                            # Bersihkan area konten lama, lalu jalankan live stream ketikan baru
-                            for chunk in response_stream:
-                                if chunk.text:
-                                    full_response_text.append(chunk.text)
-                                    area_konten.markdown("".join(full_response_text))
-                            
-                            final_text = "".join(full_response_text)
-                            if final_text:
-                                # Simpan permanen ke database backend
-                                simpan_summary_ke_db(target_keyword, periode_str, final_text)
+                            for model_name in daftar_model_fallback:
+                                try:
+                                    response_stream = client.models.generate_content_stream(
+                                        model=model_name,
+                                        contents=prompt_instruksi
+                                    )
+                                    model_terpilih = model_name
+                                    break  # Sukses terhubung, keluar dari loop fallback
+                                except Exception as e:
+                                    error_msg = str(e).lower()
+                                    if any(x in error_msg for x in ["429", "resource_exhausted", "limit", "quota"]):
+                                        st.warning(f"⚠️ Model {model_name} terkena pembatasan kuota. Mencoba model cadangan berikutnya...")
+                                        continue
+                                    else:
+                                        st.error(f"❌ Terjadi kesalahan pada model {model_name}: {e}")
+                                        raise e
+
+                            if response_stream is None:
+                                st.error("🚨 Semua model Gemini telah mencapai batas limit kuota. Silakan coba sesaat lagi.")
+                            else:
+                                # Mulai streaming teks baru langsung menimpa area_konten lama
+                                full_response_text = []
+                                for chunk in response_stream:
+                                    if chunk.text:
+                                        full_response_text.append(chunk.text)
+                                        area_konten.markdown("".join(full_response_text))
                                 
-                                # Update data session state internal Streamlit sebelum rerun
-                                st.session_state[state_key] = final_text
-                                st.session_state[state_status_key] = "Hasil Diperbarui ✨"
-                                
-                                # Timpa ulang komponen judul menjadi warna sukses/hijau dengan label baru
-                                area_judul.success(f"### 📊 Executive Summary by AI: {target_keyword} ({st.session_state[state_status_key]})")
-                                st.toast("✅ Ringkasan berhasil diperbarui!", icon="🚀")
-                                
-                                time.sleep(0.5)
-                                st.rerun()
-                                
+                                final_text = "".join(full_response_text)
+                                if final_text:
+                                    # Simpan ke DB backend
+                                    simpan_summary_ke_db(target_keyword, periode_str, final_text)
+                                    
+                                    # Perbarui memory state aplikasi
+                                    st.session_state[state_key] = final_text
+                                    st.session_state[state_status_key] = f"Hasil Diperbarui ({model_terpilih}) ✨"
+                                    
+                                    # Timpa banner judul menjadi warna hijau sukses secara instan
+                                    area_judul.success(f"### 📊 Executive Summary by AI: {target_keyword} ({st.session_state[state_status_key]})")
+                                    st.toast("✅ Ringkasan berhasil diperbarui!", icon="🚀")
+                                    
+                                    time.sleep(0.5)
+                                    st.rerun()
+                                    
                         except Exception as e:
                             st.error(f"Terjadi kesalahan saat menghubungi API Gemini: {e}")
 
