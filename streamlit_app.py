@@ -105,9 +105,18 @@ st.markdown("""
     }
 
     /* Tabs */
-    .stTabs [data-baseweb="tab-list"] { background: rgba(255, 255, 255, 0.12) !important; padding: 10px !important; border-radius: 10px !important; gap: 6px !important; }
-    .stTabs [aria-selected="true"] { background: linear-gradient(135deg, #38BDF8, #0EA5E9) !important; color: #0F172A !important; }
+    .stTabs [data-baseweb="tab-list"] {
+        display: flex !important;
+        justify-content: center !important; /* Mengatur elemen anak ke tengah */
+        gap: 20px !important;              /* Memberi jarak antar tab agar tidak menempel */
+        background: transparent !important; /* Opsional: sesuaikan dengan tema Anda */
+    }
 
+    /* 2. Opsional: Memastikan tombol tab memiliki lebar yang proporsional */
+    .stTabs [data-testid="stTab"] {
+        flex: 0 1 auto !important;         /* Tab hanya memakan ruang sesuai isi teks */
+        min-width: 120px !important;       /* Memberikan lebar minimum agar rapi */
+    }
     /* =========================================================================
        5. UTILS & RESPONSIVE
        ========================================================================= */
