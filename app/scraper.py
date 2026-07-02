@@ -84,7 +84,7 @@ def cocok_dengan_kata_kunci(keyword, judul, isi_konten):
     # Nilai 0.60 artinya: Jika minimal 60% kata kunci ditemukan, artikel dianggap sah.
     # Contoh: 'kenaikan harga papua' (3 kata bersih). Jika artikel cuma memuat kata 'harga' dan 'papua' (2/3 = 66%),
     # Maka artikel ini akan TETAP LOLOS dan disimpan ke database!
-    threshold_fleksibel = 0.60 
+    threshold_fleksibel = 0.1
     
     if rasio_kecocokan >= threshold_fleksibel:
         logging.info(f"🎯 [Filter Fleksibel] Lolos! Kecocokan {rasio_kecocokan*100:.1f}% untuk judul: {judul[:40]}...")
