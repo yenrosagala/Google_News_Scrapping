@@ -15,3 +15,6 @@ requests
 Pillow
 kaleido
 google-genai
+fpdf2
+matplotlib
+seaborn

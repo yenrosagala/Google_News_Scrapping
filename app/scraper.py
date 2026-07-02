@@ -50,22 +50,47 @@ def bersihkan_teks_html(raw_text):
 
 def cocok_dengan_kata_kunci(keyword, judul, isi_konten):
     """
-    Lapis filter di Python (Hilir):
-    Memastikan frasa keyword yang dicari benar-benar ada secara utuh 
-    (Exact Match) di dalam gabungan teks judul atau isi artikel.
+    Versi Fleksibel (Anti-Filtering Kaku):
+    1. Membuang kata hubung/sambung pengetat kalimat.
+    2. Menggunakan sistem Threshold (Ambang Batas). Jika minimal 60% kata kunci 
+       ditemukan di dalam artikel (posisi acak), maka artikel langsung lolos ke database.
     """
     if not keyword:
         return True
 
-    # Bersihkan spasi ganda dan ubah ke huruf kecil (Case-Insensitive Exact Match)
-    kw_lowercase = " ".join(keyword.strip().lower().split())
+    # 1. Bersihkan teks artikel (satukan judul dan isi menjadi huruf kecil)
     teks_artikel = " ".join(f"{judul or ''} {isi_konten or ''}".strip().lower().split())
-
-    # Artikel wajib mengandung frasa keyword secara persis berurutan
-    if kw_lowercase not in teks_artikel:
+    if not teks_artikel:
         return False
 
-    return True
+    # 2. Daftar kata hubung yang diabaikan dalam penilaian bobot relevansi
+    kata_buang = {"di", "ke", "dari", "pada", "terkait", "tentang", "seputar", "mengenai", "dalam", "untuk", "utk"}
+    raw_tokens = [k.strip().lower() for k in keyword.strip().split() if k.strip()]
+    tokens_clean = [t for t in raw_tokens if t not in kata_buang]
+
+    if not tokens_clean:
+        return True  # Jika setelah dibuang tidak ada kata tersisa, loloskan saja
+
+    # 3. Hitung berapa banyak kata kunci yang berhasil ditemukan di dalam teks berita
+    kata_terdeteksi = 0
+    for token in tokens_clean:
+        if token in teks_artikel:
+            kata_terdeteksi += 1
+
+    # 4. Hitung Rasio Fleksibilitas (Persentase Kecocokan)
+    rasio_kecocokan = kata_terdeteksi / len(tokens_clean)
+    
+    # 🟢 PENGATURAN TINGKAT FLEKSIBILITAS (Threshold)
+    # Nilai 0.60 artinya: Jika minimal 60% kata kunci ditemukan, artikel dianggap sah.
+    # Contoh: 'kenaikan harga papua' (3 kata bersih). Jika artikel cuma memuat kata 'harga' dan 'papua' (2/3 = 66%),
+    # Maka artikel ini akan TETAP LOLOS dan disimpan ke database!
+    threshold_fleksibel = 0.60 
+    
+    if rasio_kecocokan >= threshold_fleksibel:
+        logging.info(f"🎯 [Filter Fleksibel] Lolos! Kecocokan {rasio_kecocokan*100:.1f}% untuk judul: {judul[:40]}...")
+        return True
+    
+    return False
 
 
 def bersihkan_judul_feed(judul):
@@ -255,7 +280,7 @@ def ambil_feed_google_news(keyword):
     kw_clean = " ".join(keyword.strip().split())
     
     # Bungkus keyword utuh dalam tanda petik ganda, misal: "bps papua"
-    query_target = f'"{kw_clean}"'
+    query_target = f'{kw_clean}'
     
     logging.info(f"📡 Query Exact Match dikirim ke Google News: {query_target}")
     

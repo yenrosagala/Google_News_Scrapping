@@ -13,10 +13,29 @@ from app.database import (
     ambil_data_dari_db,
     hapus_semua_data_db,
     logout,
+    dapatkan_koneksi_db,
+    IS_POSTGRES,
 )
+
+# Fungsi pembantu untuk menyimpan summary baru ke database sesuai standard schema
+def simpan_summary_ke_db(kata_kunci, rentang_waktu, hasil_summary):
+    try:
+        conn = dapatkan_koneksi_db()
+        cursor = conn.cursor()
+        if IS_POSTGRES:
+            query = "INSERT INTO executive_summary (kata_kunci, rentang_waktu, hasil_summary) VALUES (%s, %s, %s)"
+        else:
+            query = "INSERT INTO executive_summary (kata_kunci, rentang_waktu, hasil_summary) VALUES (?, ?, ?)"
+        cursor.execute(query, (str(kata_kunci), str(rentang_waktu), hasil_summary))
+        conn.commit()
+        cursor.close()
+        conn.close()
+    except Exception:
+        pass
 
 from app.scraper import run_scraper_pipeline
 from app.sentiment import hitung_sentimen_leksikon
+from app.generate_pdf import generate_pdf_report  # 📄 Mengimpor fungsi PDF profesional murni Python
 
 from nltk.tokenize import sent_tokenize
 from nltk.corpus import stopwords
@@ -25,13 +44,11 @@ import re
 import time
 
 # Download required NLTK data
-# Download required NLTK data
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
     nltk.download('punkt', quiet=True)
 
-# FIX: Tambahkan ini agar stopwords otomatis terunduh jika belum ada
 try:
     nltk.data.find('corpora/stopwords')
 except LookupError:
@@ -41,17 +58,8 @@ except LookupError:
 # HELPER FUNCTION - EXECUTIVE SUMMARY GENERATOR
 # ======================================================
 @st.cache_data
-# 🟢 Sesuaikan parameter fungsi dengan menambahkan kata_kunci dan rentang_waktu
-@st.cache_data
 def buat_ringkasan_eksekutif(dataframe, kata_kunci, rentang_waktu, num_sentences=5):
-    """
-    Membuat ringkasan eksekutif dari seluruh konten artikel menggunakan extractive summarization
-    dengan sistem caching otomatis ke database.
-    """
-    from app.database import dapatkan_koneksi_db, IS_POSTGRES
     import nltk
-    
-    # 🔴 FORCE DOWNLOAD: Paksa unduh langsung di dalam fungsi untuk memastikan resource tersedia
     for res in ['tokenizers/punkt', 'corpora/stopwords']:
         try:
             nltk.data.find(res)
@@ -64,9 +72,6 @@ def buat_ringkasan_eksekutif(dataframe, kata_kunci, rentang_waktu, num_sentences
     if dataframe.empty:
         return "Tidak ada data artikel yang tersedia untuk diringkas."
 
-    # -------------------------------------------------------------------------
-    # 1. CEK KE DATABASE TERLEBIH DAHULU (CACHE HIT)
-    # -------------------------------------------------------------------------
     try:
         conn = dapatkan_koneksi_db()
         cursor = conn.cursor()
@@ -90,14 +95,11 @@ def buat_ringkasan_eksekutif(dataframe, kata_kunci, rentang_waktu, num_sentences
         if row:
             cursor.close()
             conn.close()
-            return row[0]  # ⚡ Kembalikan hasil langsung jika sudah ada di DB
+            return row[0]
             
-    except Exception as e:
-        pass  # Jika tabel belum dibuat, abaikan dan lanjut ke pembuatan manual
+    except Exception:
+        pass
 
-    # -------------------------------------------------------------------------
-    # 2. JIKA CACHE TIDAK ADA, JALANKAN LOGIKA TEXT SUMMARIZATION (CACHE MISS)
-    # -------------------------------------------------------------------------
     try:
         konten_semua = dataframe["isi_konten"].dropna()
         konten_semua = konten_semua[konten_semua.str.len() > 0]
@@ -134,23 +136,7 @@ def buat_ringkasan_eksekutif(dataframe, kata_kunci, rentang_waktu, num_sentences
             summary_sentences = heapq.nlargest(num_sentences, sentence_scores, key=sentence_scores.get)
             summary_hasil = " ".join(summary_sentences)
 
-        # -------------------------------------------------------------------------
-        # 3. SIMPAN HASIL BARU KE DATABASE SEBAGAI CACHE
-        # -------------------------------------------------------------------------
-        try:
-            conn = dapatkan_koneksi_db()
-            cursor = conn.cursor()
-            if IS_POSTGRES:
-                query_insert = "INSERT INTO executive_summary (kata_kunci, rentang_waktu, hasil_summary) VALUES (%s, %s, %s)"
-            else:
-                query_insert = "INSERT INTO executive_summary (kata_kunci, rentang_waktu, hasil_summary) VALUES (?, ?, ?)"
-                
-            cursor.execute(query_insert, (str(kata_kunci), str(rentang_waktu), summary_hasil))
-            conn.commit()
-            cursor.close()
-            conn.close()
-        except Exception as db_err:
-            pass
+        simpan_summary_ke_db(kata_kunci, rentang_waktu, summary_hasil)
 
     except Exception as e:
         summary_hasil = f"Gagal membuat ringkasan eksekutif: {str(e)}"
@@ -158,13 +144,12 @@ def buat_ringkasan_eksekutif(dataframe, kata_kunci, rentang_waktu, num_sentences
     return summary_hasil
 
 # ======================================================
-# DEFINISI DIALOG
+# DEFINISI DIALOG DETAIL ARTIKEL
 # ======================================================
 def dapatkan_link_tampil(row_data):
     link = row_data.get("link") or ""
     if not link:
         return ""
-
     try:
         decoded = gnewsdecoder(link, interval=1, proxy=None)
         if decoded.get("status") and decoded.get("decoded_url"):
@@ -174,7 +159,6 @@ def dapatkan_link_tampil(row_data):
             return url_target
     except Exception:
         pass
-
     return link
 
 
@@ -182,14 +166,11 @@ def dapatkan_link_tampil(row_data):
 def show_article(row_data):
     st.subheader(row_data["judul"])
     st.caption(f"**Media**: {row_data['media']} | **Tanggal**: {row_data['waktu_tampilan']}")
-    
     st.divider()
-    
     if pd.isna(row_data["isi_konten"]) or row_data["isi_konten"].strip() == "":
         st.info("Konten artikel kosong atau tidak berhasil di-scrap.")
     else:
         st.write(row_data["isi_konten"])
-        
     st.divider()
     st.write("**Link Sumber:**")
     link_tampil = dapatkan_link_tampil(row_data)
@@ -197,7 +178,6 @@ def show_article(row_data):
 
 
 def render_app():
-
     st.set_page_config(
         page_title="News Intelligence Dashboard",
         page_icon="📰",
@@ -208,9 +188,7 @@ def render_app():
     cek_autentikasi_manual()
     inisialisasi_database()
 
-    # ======================================================
-    # CSS STYLING - Fluent UI / Power BI Inspired
-    # ======================================================
+    # CSS Global styling
     st.markdown("""
     <style>
         .main .block-container { padding-top: 2rem; padding-bottom: 2rem; }
@@ -235,9 +213,6 @@ def render_app():
     </style>
     """, unsafe_allow_html=True)
 
-    # ======================================================
-    # HEADER
-    # ======================================================
     st.markdown("""
     <div class="main-title">
         <h1>📰 News Intelligence Dashboard</h1>
@@ -245,8 +220,50 @@ def render_app():
     </div>
     """, unsafe_allow_html=True)
 
+    # Pre-fetch data awal untuk menentukan default filter keyword terakhir
+    df = ambil_data_dari_db()
+    
+    # LOGIKA FILTER KEYWORD DEFAULT AMAN DARI PECAHAN KOMA
+    if "active_keyword" not in st.session_state:
+        st.session_state.active_keyword = None
+        if len(df) > 0:
+            df["waktu_tampilan"] = pd.to_datetime(df["waktu_tampilan"], errors="coerce")
+            id_terakhir = df["waktu_tampilan"].idxmax()
+            if pd.notna(id_terakhir):
+                raw_kw = df.loc[id_terakhir, "kata_kunci"]
+                if "," in str(raw_kw):
+                    st.session_state.active_keyword = [k.strip() for k in str(raw_kw).split(",") if k.strip()]
+                else:
+                    st.session_state.active_keyword = [str(raw_kw).strip()]
+
     # ======================================================
-    # SIDEBAR
+    # MENU UTAMA SCRAPING (HALAMAN UTAMA)
+    # ======================================================
+    with st.container():
+        st.markdown("### 🚀 Menu Utama Scraping")
+        keyword = st.text_input("🔍 Keyword Pencarian Baru", placeholder="Contoh: Inflasi Papua")
+
+        if st.button("🔥 Jalankan Scraping", width='stretch', type="primary"):
+            if not keyword.strip():
+                st.warning("Masukkan keyword terlebih dahulu.")
+            else:
+                progress_bar = st.progress(0.0)
+                status_text = st.empty()
+                try:
+                    run_scraper_pipeline(
+                        keyword=keyword,
+                        on_progress=lambda p: progress_bar.progress(p),
+                        on_status=lambda s: status_text.text(s)
+                    )
+                    st.session_state.active_keyword = [keyword.strip()]
+                    st.success("✅ Scraping selesai. Data telah diperbarui.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Terjadi kegagalan sistem saat scraping: {e}")
+        st.divider()
+
+    # ======================================================
+    # SIDEBAR - KONTROL FILTER & UTILITY
     # ======================================================
     with st.sidebar:
         st.image("https://img.icons8.com/color/96/news.png", width=70)
@@ -259,78 +276,67 @@ def render_app():
         elif user_type == "login":
             st.success("🔐 **User Login**\n\nFull access including delete")
 
-        st.markdown("---")
-        keyword = st.text_input("🔍 Keyword Pencarian", placeholder="Contoh: Inflasi Papua")
+        st.markdown("### 🎛️ Filter Data Dashboard")
+        
+        if len(df) > 0:
+            available_options = list(df["kata_kunci"].unique())
+            raw_defaults = st.session_state.active_keyword if st.session_state.active_keyword else []
+            validated_defaults = [kw for kw in raw_defaults if kw in available_options]
 
-        if st.button("🚀 Jalankan Scraping", width='stretch', type="primary"):
-            if not keyword.strip():
-                st.warning("Masukkan keyword terlebih dahulu.")
-            else:
-                progress_bar = st.progress(0.0)
-                status_text = st.empty()
-                try:
-                    run_scraper_pipeline(
-                        keyword=keyword,
-                        on_progress=lambda p: progress_bar.progress(p),
-                        on_status=lambda s: status_text.text(s)
-                    )
-                    st.success("✅ Scraping selesai. Data telah diperbarui.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Terjadi kegagalan sistem saat scraping: {e}")
+            selected_keyword = st.multiselect(
+                "Filter Keyword", 
+                options=available_options, 
+                default=validated_defaults if validated_defaults else None
+            )
+            st.session_state.active_keyword = selected_keyword
+            
+            selected_sentimen = st.multiselect("Filter Sentimen", options=["Positif", "Negatif", "Netral"], default=["Positif", "Negatif", "Netral"])
+            selected_media = st.multiselect("Filter Media", options=df["media"].unique(), default=None)
+            
+            df["waktu_tampilan"] = pd.to_datetime(df["waktu_tampilan"], errors="coerce")
+            min_date = df["waktu_tampilan"].min().date()
+            max_date = df["waktu_tampilan"].max().date()
+            date_range = st.date_input("Rentang Tanggal", value=[min_date, max_date], min_value=min_date, max_value=max_date)
+            
+            start_date, end_date = None, None
+            if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+                start_date, end_date = date_range
+        else:
+            st.info("Belum ada data untuk difilter.")
+            selected_keyword, selected_sentimen, selected_media = [], [], []
+            start_date, end_date = None, None
 
         st.markdown("---")
         if user_type == "login":
             with st.popover("🗑 Hapus Seluruh Database", width='stretch'):
                 st.warning("⚠️ Tindakan ini akan menghapus semua artikel dari database!")
                 password_konfirmasi = st.text_input("Masukkan password akun Anda", type="password", key="del_pwd")
-                
                 if st.button("Konfirmasi Hapus Data", type="primary", width='stretch'):
                     password_login = st.session_state.get("saved_db_password", "")
                     if password_konfirmasi == password_login: 
                         jumlah = hapus_semua_data_db()
+                        if "active_keyword" in st.session_state:
+                            del st.session_state.active_keyword
                         st.success(f"✅ {jumlah} berita berhasil dihapus.")
                         st.rerun()
                     else:
                         st.error("❌ Password salah. Harus sama dengan password login Anda.")
         else:
-            st.button("🗑 Hapus Seluruh Database", width='stretch', disabled=True, help="Fitur ini hanya tersedia untuk User Login")
+            st.button("🗑 Hapus Seluruh Database", width='stretch', disabled=True)
 
         st.markdown("---")
         if st.button("🚪 Logout", width='stretch', type="secondary"):
+            if "active_keyword" in st.session_state:
+                del st.session_state.active_keyword
             logout()
 
     # ======================================================
-    # DATA FETCH & PREP
+    # DATA PROCESSING & PIPELINE FILTERING
     # ======================================================
-    df = ambil_data_dari_db()
-
     if len(df) > 0:
-        df["waktu_tampilan"] = pd.to_datetime(df["waktu_tampilan"], errors="coerce")
         df["tanggal"] = df["waktu_tampilan"].dt.date
         df["Sentimen"] = df["isi_konten"].apply(hitung_sentimen_leksikon)
 
-        # Bagian Filter UI dan seleksi multiselect tetap dipertahankan di sini
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            selected_keyword = st.multiselect("Filter Keyword", options=df["kata_kunci"].unique(), default=None)
-        with col2:
-            selected_sentimen = st.multiselect("Filter Sentimen", options=["Positif", "Negatif"], default=["Positif", "Negatif"])
-
-        col3, col4 = st.columns([2, 1])
-        with col3:
-            selected_media = st.multiselect("Filter Media", options=df["media"].unique(), default=None)
-        with col4:
-            min_date = df["waktu_tampilan"].min().date()
-            max_date = df["waktu_tampilan"].max().date()
-            
-            date_range = st.date_input("Rentang Tanggal", value=[min_date, max_date], min_value=min_date, max_value=max_date)
-            start_date, end_date = None, None
-            if isinstance(date_range, list) or isinstance(date_range, tuple):
-                if len(date_range) == 2:
-                    start_date, end_date = date_range
-
-        # Proses Penyaringan Dataframe Jalankan Terlebih Dahulu
         filtered_df = df.copy()
         if selected_keyword:
             filtered_df = filtered_df[filtered_df["kata_kunci"].isin(selected_keyword)]
@@ -345,19 +351,15 @@ def render_app():
             mask = (filtered_df["waktu_tampilan"] >= start_dt) & (filtered_df["waktu_tampilan"] <= end_dt)
             filtered_df = filtered_df[mask]
 
-        # REVISI UTAMA: Hitung KPI berdasarkan hasil filter (filtered_df)
         total_berita = len(filtered_df)
         berita_dengan_isi = filtered_df["isi_konten"].notna().sum()
         jumlah_media = filtered_df["media"].nunique()
         jumlah_keyword = filtered_df["kata_kunci"].nunique()
-
     else:
         total_berita, berita_dengan_isi, jumlah_media, jumlah_keyword = 0, 0, 0, 0
         filtered_df = pd.DataFrame()
 
-    # ======================================================
-    # KPI CARDS
-    # ======================================================
+    # KPI Cards
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
     with kpi1:
         st.markdown(f'<div class="kpi-box"><div class="kpi-label">📰 Total Berita</div><div class="kpi-value">{total_berita:,}</div></div>', unsafe_allow_html=True)
@@ -368,81 +370,17 @@ def render_app():
     with kpi4:
         st.markdown(f'<div class="kpi-box"><div class="kpi-label">🔖 Jumlah Keyword</div><div class="kpi-value">{jumlah_keyword:,}</div></div>', unsafe_allow_html=True)
 
-    # ======================================================
-    # CHARTS & TABS
-    # ======================================================
+    # WORKSPACE TABS
     tab1, tab2, tab3 = st.tabs(["📊 Analisis", "📈 Grafik", "📂 Data"])
     with tab1:
         st.subheader("📋 Ringkasan Eksekutif")
         
-        # 🟢 PERBAIKAN UTAMA: Amankan selected_keyword di awal agar tidak UnboundLocalError jika data kosong
-        try:
-            # Periksa apakah selected_keyword ada di level global/local streamlit
-            if 'selected_keyword' in locals() or 'selected_keyword' in globals():
-                active_keywords = selected_keyword if selected_keyword else []
-            else:
-                active_keywords = []
-        except NameError:
-            active_keywords = []
-
+        active_keywords = selected_keyword if selected_keyword else []
         keyword_str = ", ".join(active_keywords) if active_keywords else "All"
-
-        # Amankan juga start_date dan end_date
-        try:
-            if start_date and end_date:
-                date_range_str = f"{start_date}_to_{end_date}"
-            else:
-                date_range_str = "all_time"
-        except NameError:
-            date_range_str = "all_time"
-            
+        date_range_str = f"{start_date} sampai {end_date}" if (start_date and end_date) else "all_time"
         periode_str = f"period_{date_range_str}" 
 
-        # --------------------------------------------------------------------
-        # Fungsi helper interaksi database cache (Anti-Error jika tabel kosong)
-        # --------------------------------------------------------------------
-        def cek_cache_summary_db(kata_kunci, rentang_waktu):
-            from app.database import dapatkan_koneksi_db, IS_POSTGRES
-            try:
-                conn = dapatkan_koneksi_db()
-                cursor = conn.cursor()
-                if IS_POSTGRES:
-                    query = "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = %s AND rentang_waktu = %s ORDER BY waktu_dibuat DESC LIMIT 1"
-                else:
-                    query = "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = ? AND rentang_waktu = ?"
-                cursor.execute(query, (str(kata_kunci), str(rentang_waktu)))
-                row = cursor.fetchone()
-                cursor.close()
-                conn.close()
-                if row: return row[0]
-            except Exception:
-                return None
-            return None
-
-        def simpan_summary_ke_db(kata_kunci, rentang_waktu, hasil_summary):
-            from app.database import dapatkan_koneksi_db, IS_POSTGRES
-            try:
-                conn = dapatkan_koneksi_db()
-                cursor = conn.cursor()
-                if IS_POSTGRES:
-                    query = "INSERT INTO executive_summary (kata_kunci, rentang_waktu, hasil_summary) VALUES (%s, %s, %s)"
-                else:
-                    query = "INSERT INTO executive_summary (kata_kunci, rentang_waktu, hasil_summary) VALUES (?, ?, ?)"
-                cursor.execute(query, (str(kata_kunci), str(rentang_waktu), hasil_summary))
-                conn.commit()
-                cursor.close()
-                conn.close()
-            except Exception:
-                pass
-        # --------------------------------------------------------------------
-
-        # Menggunakan try-except pembungkus len(filtered_df) agar aman jika filtered_df tidak terdefinisi
-        try:
-            df_length = len(filtered_df)
-        except NameError:
-            df_length = 0
-
-        if df_length > 0:
+        if len(filtered_df) > 0:
             col1, col2, col3 = st.columns(3)
             with col1:
                 sentimen_count = filtered_df["Sentimen"].value_counts()
@@ -483,39 +421,45 @@ def render_app():
             for insight in insights:
                 st.write(f"• {insight}")
             
-            # --------------------------------------------------
-            # ATTACHED: EXECUTIVE SUMMARY SYSTEM (Official Gemini Client)
-            # --------------------------------------------------
             st.divider()
 
+            # --- OFFICIAL GEMINI SYSTEM EXPANDER ---
             with st.expander("📝 Ringkasan Eksekutif Konten (Official Gemini Client)", expanded=True):
-                if active_keywords and len(active_keywords) > 0:
-                    default_keyword = active_keywords[0]
-                else:
-                    default_keyword = "Inflasi Papua"
-                    
-                target_keyword = st.text_input("Konfirmasi Kata Kunci Analisis:", value=default_keyword)
+                # 🟢 REVISI: Menggabungkan seluruh keyword aktif dari filter sidebar dengan pemisah koma sebagai default value
+                joined_default_keywords = ", ".join(active_keywords) if active_keywords else "Inflasi Papua"
                 
-                # Filter data berdasarkan keyword target
-                filtered_data = filtered_df[filtered_df['kata_kunci'].astype(str).str.contains(target_keyword, case=False, na=False)]
+                input_keyword = st.text_input(
+                    "Konfirmasi Kata Kunci Analisis (Pisahkan dengan koma untuk kombinasi gabungan multi-keyword):", 
+                    value=joined_default_keywords
+                )
+                
+                # Ubah teks input menjadi list Proper Case yang bersih
+                target_keywords_list = [kw.strip().title() for kw in input_keyword.split(",") if kw.strip()]
+                
+                if target_keywords_list:
+                    # 🟢 PERBAIKAN: Menggunakan OR LOGIC (A|B) agar data gabungan terkumpul dan tidak kosong
+                    regex_pattern = "|".join([re.escape(kw) for kw in target_keywords_list])
+                    filtered_data = filtered_df[filtered_df['kata_kunci'].astype(str).str.contains(regex_pattern, case=False, na=False)]
+                else:
+                    filtered_data = pd.DataFrame()
+                
+                # Penggabungan string nama untuk key cache database dan file PDF
+                target_keyword = "_dan_".join([kw.replace(" ", "_").lower() for kw in target_keywords_list]) if target_keywords_list else "inflasi_papua"
+                # Label cantik untuk tampilan judul report UI & PDF
+                display_title_keyword = ", ".join(target_keywords_list) if target_keywords_list else "Inflasi Papua"
                 
                 if filtered_data.empty:
-                    st.warning(f"Data tidak ditemukan untuk kata kunci: '{target_keyword}'")
+                    st.warning(f"Data tidak ditemukan untuk kombinasi kata kunci: {target_keywords_list}")
                 else:
                     date_min = filtered_data['waktu_tampilan'].dropna().min()
                     date_max = filtered_data['waktu_tampilan'].dropna().max()
                     date_range_str = f"{date_min} sampai {date_max}"
                     
-                    # Fungsi cek cache berdasarkan kata kunci di database
                     def cek_cache_summary_hanya_keyword(kata_kunci):
-                        from app.database import dapatkan_koneksi_db, IS_POSTGRES
                         try:
                             conn = dapatkan_koneksi_db()
                             cursor = conn.cursor()
-                            if IS_POSTGRES:
-                                query = "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = %s ORDER BY waktu_dibuat DESC LIMIT 1"
-                            else:
-                                query = "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = ? ORDER BY waktu_dibuat DESC LIMIT 1"
+                            query = "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = %s ORDER BY waktu_dibuat DESC LIMIT 1" if IS_POSTGRES else "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = ? ORDER BY waktu_dibuat DESC LIMIT 1"
                             cursor.execute(query, (str(kata_kunci),))
                             row = cursor.fetchone()
                             cursor.close()
@@ -525,67 +469,80 @@ def render_app():
                             return None
                         return None
 
-                    # 🟢 INISIALISASI SESSION STATE SECARA AMAN (Mencegah KeyError)
-                    state_key = f"summary_{target_keyword.replace(' ', '_').lower()}"
+                    state_key = f"summary_{target_keyword}"
                     state_status_key = f"status_{state_key}"
                     
                     if state_key not in st.session_state:
                         cache_db = cek_cache_summary_hanya_keyword(target_keyword)
                         st.session_state[state_key] = cache_db
                         st.session_state[state_status_key] = "Versi Cache" if cache_db else "Baru"
-                    
-                    if state_status_key not in st.session_state:
-                        st.session_state[state_status_key] = "Versi Cache" if st.session_state[state_key] else "Baru"
 
-                    # 🟢 WADAH TUNGGAL (Placeholder): Judul dan konten akan ditulis langsung di sini
                     area_judul = st.empty()
                     area_konten = st.empty()
 
-                    # Render tampilan awal dari Session State saat ini
                     if st.session_state[state_key]:
-                        area_judul.success(f"### 📊 Executive Summary by AI: {target_keyword} ({st.session_state[state_status_key]})")
+                        area_judul.success(f"### 📊 Executive Summary by AI: {display_title_keyword} ({st.session_state[state_status_key]})")
                         area_konten.markdown(st.session_state[state_key])
+                        
+                        # --- EXPORT REPORT PDF AMAN ---
                         st.write("---")
+                        st.markdown("#### 📥 Cetak Laporan Analisis Resmi")
+                        t_media = filtered_data['media'].value_counts().head(3)
+                        t_media_str = ", ".join([f"{m} ({c} artikel)" for m, c in t_media.items()])
+
+                        try:
+                            pdf_bytes = generate_pdf_report(
+                                filtered_df=filtered_df,
+                                insights=insights,
+                                target_keyword=display_title_keyword,
+                                date_range_str=date_range_str,
+                                t_media_str=t_media_str,
+                                summary_text=st.session_state[state_key]
+                            )
+                            if pdf_bytes:
+                                st.download_button(
+                                    label="📄 Download Laporan Resmi (PDF)",
+                                    data=bytes(pdf_bytes),
+                                    file_name=f"Laporan_Analisis_{target_keyword}_{datetime.now().strftime('%Y%m%d')}.pdf",
+                                    mime="application/pdf",
+                                    width='stretch'
+                                )
+                        except Exception as pdf_err:
+                            st.error(f"Sistem gagal menyiapkan cetakan PDF: {pdf_err}")
                     else:
                         area_judul.info("💡 Belum ada narasi ringkasan otomatis untuk filter ini di database.")
 
-                    # Tombol aksi dinamis berdasarkan status konten
                     trigger_generate = False
                     if st.session_state[state_key] and st.session_state[state_status_key] == "Versi Cache":
-                        st.info("💡 Data di atas dapat diperbarui dengan menggabungkan artikel historis dan artikel baru hasil scraping.")
                         if st.button("🔄 Generate Ulang ", key="regenerate_gemini_summary"):
                             trigger_generate = True
+                            st.session_state[state_status_key] = "Versi Cache"
                     elif not st.session_state[state_key]:
                         if st.button("✨ Hasilkan Narasi Ringkasan Otomatis", key="generate_gemini_summary"):
                             trigger_generate = True
 
-                    # Proses pembuatan narasi dengan Mekanisme Fallback Model & In-place Replacement
+                    # ======================================================
+                    # LOGIKA GENERATE TEKS DAN BLOK FAILOVER MODEL AGRESIF
+                    # ======================================================
                     if trigger_generate:
                         area_judul.info("⏳ Sedang menulis dan memperbarui ringkasan eksekutif baru...")
-                        
                         try:
                             from google import genai
                             client = genai.Client()
                             
                             t_media = filtered_data['media'].value_counts().head(3)
                             t_media_str = ", ".join([f"{m} ({c} artikel)" for m, c in t_media.items()])
-                            
                             clean_df = filtered_data.dropna(subset=['isi_konten', 'judul', 'media'])
                             
-                            # Menggunakan porsi sampling gabungan jika sebelumnya sudah ada data lama
                             if st.session_state[state_status_key] == "Versi Cache":
-                                clean_df = clean_df.sample(frac=0.15, random_state=42)
+                                clean_df = clean_df.sample(frac=0.15, random_state=42) if len(clean_df) > 10 else clean_df
                                 catatan_regenerate = "\n- CATATAN TAMBAHAN: Data ini merupakan gabungan komprehensif dari data historis dan hasil scraping terbaru. Soroti tren pergerakan atau perubahan situasi terbaru jika terdeteksi."
                             else:
-                                clean_df = clean_df.sample(frac=0.10, random_state=42)
+                                clean_df = clean_df.sample(frac=0.10, random_state=42) if len(clean_df) > 10 else clean_df
                                 catatan_regenerate = ""
-                            
-                            formatted_articles = [
-                                f"--- ARTIKEL: {row['judul']} ({row['media']}) ---\n{row['isi_konten']}"
-                                for _, row in clean_df.iterrows()
-                            ]
+                                
+                            formatted_articles = [f"--- ARTIKEL: {row['judul']} ({row['media']}) ---\n{row['isi_konten']}" for _, row in clean_df.iterrows()]
                             concatenated_content = "\n\n".join(formatted_articles)
-                            
                             if len(concatenated_content) > 120000:
                                 concatenated_content = concatenated_content[:120000] + "\n\n... [Sisa konten dipotong demi efisiensi konteks] ..."
 
@@ -596,13 +553,13 @@ def render_app():
                             Buatlah sebuah analisis berita eksekutif yang mendalam dan komprehensif dalam bentuk ESSAI MURNI mengalir (narrative essay). Jangan menggunakan sub-judul kaku untuk masing-masing poin 5W+1H (seperti "WHAT:", "WHO:", dll), melainkan leburkan seluruh unsur tersebut secara organis, mengalir, dan profesional ke dalam paragraf-paragraf esai. {catatan_regenerate}
 
                             I. PEDOMAN METADATA & KONTEKS (Wajib ditulis di paragraf pembuka secara natural):
-                            - Profil Kata Kunci yang Dianalisis: {target_keyword}
+                            - Profil Kata Kunci yang Dianalisis: {display_title_keyword}
                             - Cakupan Rentang Tanggal (waktu_tampil): {date_range_str}
                             - 3 Kontributor Media Teratas: {t_media_str}
 
                             II. KERANGKA ESSAI (Integrasikan seluruh poin ini ke dalam narasi esai):
                             Berdasarkan kolom isi_konten pada data gabungan, narasikan:
-                            - Peristiwa utama, pengumuman, kebijakan, atau isu krusial yang dilaporkan terkait tren inflasi.
+                            - Peristiwa utama, pengumukan, kebijakan, atau isu krusial yang dilaporkan terkait tren inflasi.
                             - Individu, organisasi, institusi (seperti BI, Pemda, Bulog, BPS) yang terlibat aktif atau terdampak dalam pemberitaan.
                             - Linimasa atau waktu terjadinya peristiwa-peristiwa penting tersebut berdasarkan data artikel.
                             - Cakupan geografis daerah yang memberikan dampak atau terdampak terbesar di wilayah Papua (seperti Jayapura, Nabire, Keerom, dll).
@@ -618,7 +575,6 @@ def render_app():
                             {concatenated_content}
                             """
                             
-                            # 🔵 STRATEGI CADANGAN MODEL BERANTAI (Rate Limit Fallback)
                             daftar_model_fallback = [
                                 "gemini-2.5-flash", 
                                 "gemini-3.1-flash-lite",
@@ -628,6 +584,7 @@ def render_app():
                             
                             response_stream = None
                             model_terpilih = None
+                            list_errors = []
                             
                             for model_name in daftar_model_fallback:
                                 try:
@@ -636,20 +593,20 @@ def render_app():
                                         contents=prompt_instruksi
                                     )
                                     model_terpilih = model_name
-                                    break  # Sukses terhubung, keluar dari loop fallback
+                                    break  
                                 except Exception as e:
-                                    error_msg = str(e).lower()
-                                    if any(x in error_msg for x in ["429", "resource_exhausted", "limit", "quota"]):
-                                        st.warning(f"⚠️ Model {model_name} terkena pembatasan kuota. Mencoba model cadangan berikutnya...")
-                                        continue
-                                    else:
-                                        st.error(f"❌ Terjadi kesalahan pada model {model_name}: {e}")
-                                        raise e
+                                    list_errors.append(f"- **{model_name}**: {str(e)}")
+                                    st.toast(f"🔄 {model_name} sibuk/gagal, mencoba cadangan berikutnya...", icon="⚠️")
+                                    continue
 
+                            # Munculkan error kumulatif hanya jika seluruh model gagal total
                             if response_stream is None:
-                                st.error("🚨 Semua model Gemini telah mencapai batas limit kuota. Silakan coba sesaat lagi.")
+                                error_summary = "\n".join(list_errors)
+                                st.error(
+                                    f"🚨 **Semua model Gemini gagal merespons.** Silakan coba sesaat lagi.\n\n"
+                                    f"**Detail Log Kegagalan Sistem:**\n{error_summary}"
+                                )
                             else:
-                                # Mulai streaming teks baru langsung menimpa area_konten lama
                                 full_response_text = []
                                 for chunk in response_stream:
                                     if chunk.text:
@@ -658,84 +615,49 @@ def render_app():
                                 
                                 final_text = "".join(full_response_text)
                                 if final_text:
-                                    # Simpan ke DB backend
                                     simpan_summary_ke_db(target_keyword, periode_str, final_text)
-                                    
-                                    # Perbarui memory state aplikasi
                                     st.session_state[state_key] = final_text
                                     st.session_state[state_status_key] = f"Hasil Diperbarui ({model_terpilih}) ✨"
                                     
-                                    # Timpa banner judul menjadi warna hijau sukses secara instan
-                                    area_judul.success(f"### 📊 Executive Summary by AI: {target_keyword} ({st.session_state[state_status_key]})")
+                                    area_judul.success(f"### 📊 Executive Summary by AI: {display_title_keyword} ({st.session_state[state_status_key]})")
                                     st.toast("✅ Ringkasan berhasil diperbarui!", icon="🚀")
                                     
                                     time.sleep(0.5)
                                     st.rerun()
                                     
-                        except Exception as e:
-                            st.error(f"Terjadi kesalahan saat menghubungi API Gemini: {e}")
+                        except Exception as main_e:
+                            st.error(f"Terjadi kesalahan internal sistem: {main_e}")
+        else:
+            st.info("❌ Tidak ada data untuk ditampilkan.")
 
-                        else:
-                            st.info("❌ Tidak ada data untuk ditampilkan.")
-
-                with tab2:
-                    st.subheader("📈 Visualisasi Data")
-                    if len(filtered_df) > 0:
-                        col1, col2 = st.columns([1, 1], gap="large")
-                        with col1:
-                            sentimen_count = filtered_df["Sentimen"].value_counts().reset_index()
-                            sentimen_count.columns = ["Sentimen", "Jumlah"]
-                            fig_sentimen = px.pie(sentimen_count, names="Sentimen", values="Jumlah", title="Distribusi Sentimen", color="Sentimen", color_discrete_map={"Positif": "#4CAF50", "Negatif": "#F44336"}, hole=0.5)
-                            fig_sentimen.update_traces(textinfo='percent+label')
-                            st.plotly_chart(fig_sentimen, width='stretch')
-
-                        with col2:
-                            top_10_m = filtered_df["media"].value_counts().head(10).reset_index()
-                            top_10_m.columns = ["Media", "Jumlah"]
-                            fig_media = px.bar(top_10_m, x="Jumlah", y="Media", orientation="h", title="Top 10 Media", color="Jumlah", color_continuous_scale="Blues")
-                            fig_media.update_layout(yaxis={'categoryorder': 'total ascending'})
-                            st.plotly_chart(fig_media, width='stretch')
-
-                        if "tanggal" in filtered_df.columns:
-                            berita_per_hari = filtered_df.groupby("tanggal").size().reset_index(name="Jumlah")
-                            berita_per_hari["tanggal"] = pd.to_datetime(berita_per_hari["tanggal"])
-                            fig_line = px.line(berita_per_hari, x="tanggal", y="Jumlah", title="Jumlah Berita per Hari", markers=True)
-                            fig_line.update_traces(line_color="#0078D4")
-                            st.plotly_chart(fig_line, width='stretch')
-                    else:
-                        st.info("Tidak ada data untuk ditampilkan.")
+    with tab2:
+        st.subheader("📈 Visualisasi Data")
+        if len(filtered_df) > 0:
+            col1, col2 = st.columns([1, 1], gap="large")
+            with col1:
+                sentimen_count = filtered_df["Sentimen"].value_counts().reset_index()
+                sentimen_count.columns = ["Sentimen", "Jumlah"]
+                fig_sentimen = px.pie(sentimen_count, names="Sentimen", values="Jumlah", title="Distribusi Sentimen", color="Sentimen", color_discrete_map={"Positif": "#4CAF50", "Negatif": "#F44336", "Netral": "#9E9E9E"}, hole=0.5)
+                st.plotly_chart(fig_sentimen, width='stretch')
+            with col2:
+                top_10_m = filtered_df["media"].value_counts().head(10).reset_index()
+                top_10_m.columns = ["Media", "Jumlah"]
+                fig_media = px.bar(top_10_m, x="Jumlah", y="Media", orientation="h", title="Top 10 Media", color_continuous_scale="Blues")
+                st.plotly_chart(fig_media, width='stretch')
+        else:
+            st.info("Tidak ada data untuk grafik.")
 
     with tab3:
         st.subheader("📂 Database Berita")
         if len(filtered_df) > 0:
             display_df = filtered_df[["kata_kunci", "judul", "media", "waktu_tampilan", "Sentimen", "isi_konten"]].copy()
             display_df["waktu_tampilan"] = pd.to_datetime(display_df["waktu_tampilan"]).dt.strftime("%d %b %Y, %H:%M")
-
             selected_rows = st.dataframe(display_df, width='stretch', hide_index=True, height=500, selection_mode="single-row", on_select="rerun")
-
-            csv = filtered_df.to_csv(index=False, sep=";").encode('utf-8')
-            st.download_button(label="⬇️ Download Data (Excel/CSV)", data=csv, file_name=f"news_data_{datetime.now().strftime('%Y%m%d')}.csv", mime="text/csv", width='stretch')
-
-            export_df = filtered_df.copy()
-            for col in ["kata_kunci", "judul", "media", "waktu_tampilan", "Sentimen", "isi_konten", "link"]:
-                if col not in export_df.columns:
-                    export_df[col] = ""
-
-            export_df = export_df[["kata_kunci", "judul", "media", "waktu_tampilan", "Sentimen", "isi_konten", "link"]].copy()
-            export_df = export_df.rename(columns={"waktu_tampilan": "waktu_tampil", "Sentimen": "sentimen", "isi_konten": "isi_konten", "link": "link_sumber"})
-            export_csv = export_df.to_csv(index=False, sep=";").encode("utf-8")
-            st.download_button(label="⬇️ Download Data Lengkap (CSV)", data=export_csv, file_name=f"news_data_lengkap_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv", mime="text/csv", width='stretch')
-
+            
             selected_row_index = selected_rows["selection"]["rows"]
             if selected_row_index:
-                row_terpilih = filtered_df.iloc[selected_row_index[0]]           
-                show_article(row_terpilih)
+                show_article(filtered_df.iloc[selected_row_index[0]])
         else:
-            st.info("❌ Tidak ada data berita yang sesuai filter.")
+            st.info("❌ Tidak ada data berita.")
 
-    # ======================================================
-    # FOOTER
-    # ======================================================
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("---")
-    st.markdown('<div class="footer">© 2026 | News Intelligence Dashboard | Yenro Sagala - BPS Provinsi Papua</div>', unsafe_allow_html=True)
+    st.markdown("<br><hr><div class='footer'>© 2026 | News Intelligence Dashboard | Yenro P Sagala - BPS Provinsi Papua</div>", unsafe_allow_html=True)
