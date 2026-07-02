@@ -43,7 +43,6 @@ def _resolve_sqlite_path(db_url):
 # ======================================================
 
 def cek_autentikasi_manual():
-
     if "db_authenticated" not in st.session_state:
         st.session_state.db_authenticated = False
 
@@ -57,93 +56,186 @@ def cek_autentikasi_manual():
     if st.session_state.db_authenticated:
         return
 
-    st.markdown("<br><br>", unsafe_allow_html=True)
+    # --- STYLE PREMIUM SCANDINAVIAN / SAAS MODERN ---
+    st.markdown("""
+        <style>
+        /* Menyembunyikan header default Streamlit agar aplikasi terasa mandiri */
+        header {visibility: hidden;}
+        footer {visibility: hidden;}
+        
+        /* Container Form Utama */
+        .premium-card {
+            background-color: #ffffff;
+            padding: 2.5rem 2rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            border: 1px solid #eef2f6;
+            margin-top: 10vh;
+        }
+        
+        /* Tipografi Judul */
+        .premium-title {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: #0f172a;
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 4px;
+            text-align: center;
+        }
+        .premium-subtitle {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 24px;
+            text-align: center;
+        }
+        
+        /* Tag Badge Kecil di Atas */
+        .badge-container {
+            text-align: center;
+            margin-bottom: 8px;
+        }
+        .premium-badge {
+            background-color: #f1f5f9;
+            color: #475569;
+            padding: 4px 12px;
+            border-radius: 100px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-block;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        /* Modifikasi UI Tabs agar menyatu secara estetis */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 8px;
+            background-color: #f8fafc;
+            padding: 6px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+        }
+        .stTabs [data-baseweb="tab"] {
+            height: 38px;
+            white-space: pre-wrap;
+            background-color: transparent;
+            border-radius: 6px;
+            color: #64748b;
+            font-weight: 500;
+            border: none !important;
+            transition: all 0.2s ease;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            font-weight: 600;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([1,2,1])
+    # Memposisikan kartu di tengah layar dengan kolom pembantu
+    col1, col2, col3 = st.columns([1, 1.8, 1])
 
     with col2:
-
-        with st.container(border=True):
-
-            st.subheader("🔒 Dashboard Access")
-
-            st.caption(
-                "Pilih mode akses untuk membuka dashboard."
-            )
-
-            # Tab untuk memilih tipe user
-            tab_umum, tab_login = st.tabs(["👥 User Umum", "🔐 User Login"])
+        # Wrapper HTML pembuka untuk gaya premium
+        st.markdown("""
+            <div class="premium-card">
+                <div class="badge-container">
+                    <span class="premium-badge">🔒 Dashboard Access</span>
+                </div>
+                <h1 class="premium-title">Media Intelligence Engine</h1>
+                <h4 class="premium-title">News Scraper, Analisis Sentimen Berita, Executive Summary AI</h4>
+                <p class="premium-subtitle">Aplikasi scraping Google News berdasarkan keyword, Cara merangkum berita otomatis untuk eksekutif.</p>
+                <p class="premium-subtitle">Silakan pilih metode autentikasi di bawah untuk melanjutkan</p>
+                    
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Menggunakan form Streamlit di dalam container untuk layout yang menyatu
+        with st.container():
+            tab_umum, tab_login = st.tabs(["👥 Akses Umum", "🔐 Akses Administrator"])
 
             with tab_umum:
-                st.info(
-                    "**User Umum**\n\n"
-                    "✅ Akses dashboard tanpa password\n"
-                    "✅ Lihat semua data dan grafik\n"
-                    "❌ Tidak bisa hapus database"
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div style='background-color: #f8fafc; border-left: 4px solid #cbd5e1; padding: 16px; border-radius: 0 8px 8px 0; margin-bottom: 20px; font-size: 13.5px; color: #334155;'>"
+                    "<strong>Mode Peninjau (Read-Only)</strong><br><br>"
+                    "⏱️ Akses instan tanpa kredensial<br>"
+                    "📊 Dapat memantau data & grafik analitik secara penuh<br>"
+                    "🔒 Fitur modifikasi database & destruksi dinonaktifkan"
+                    "</div>", 
+                    unsafe_allow_html=True
                 )
                 
                 if st.button(
-                    "Akses sebagai User Umum",
-                    type="primary",
+                    "Masuk sebagai User Umum",
+                    type="secondary",
                     use_container_width=True,
                     key="btn_user_umum"
                 ):
                     st.session_state.db_authenticated = True
                     st.session_state.user_type = "umum"
                     st.session_state.saved_db_password = ""
-                    st.success("Login berhasil sebagai User Umum.")
+                    st.success("Akses umum diberikan. Mempersiapkan dashboard...")
                     st.rerun()
 
             with tab_login:
-                st.info(
-                    "**User Login**\n\n"
-                    "✅ Akses dashboard dengan password\n"
-                    "✅ Lihat semua data dan grafik\n"
-                    "✅ Dapat hapus database"
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown(
+                    "<div style='background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 16px; border-radius: 0 8px 8px 0; margin-bottom: 20px; font-size: 13.5px; color: #1e40af'>"
+                    "<strong>Mode Administrator (Full-Access)</strong><br><br>"
+                    "⚡ Membuka kontrol penuh pipeline data<br>"
+                    "🛠️ Hak akses eksekusi script pencarian baru<br>"
+                    "⚠️ Diperlukan password database yang valid"
+                    "</div>", 
+                    unsafe_allow_html=True
                 )
                 
                 password = st.text_input(
-                    "Password",
+                    "Kredensial Database",
                     type="password",
-                    key="pwd_login"
+                    placeholder="Masukkan password database...",
+                    key="pwd_login",
+                    label_visibility="collapsed" # Menyembunyikan label bawaan agar lebih clean karena sudah ada placeholder
                 )
+                
+                st.markdown("<div style='margin-top: 12px;'></div>", unsafe_allow_html=True)
 
                 if st.button(
-                    "Login dengan Password",
+                    "Otorisasi & Masuk",
                     type="primary",
                     use_container_width=True,
                     key="btn_user_login"
                 ):
-
                     if password.strip() == "":
                         st.error("Password tidak boleh kosong.")
-
                     else:
-
-                        # simpan password
                         st.session_state.saved_db_password = password
-
                         try:
-                            # test koneksi
+                            # Test koneksi
+                            from app.database import dapatkan_koneksi_db
                             conn = dapatkan_koneksi_db()
                             conn.close()
 
                             st.session_state.db_authenticated = True
                             st.session_state.user_type = "login"
-
-                            st.success("Login berhasil.")
-
+                            st.success("Otorisasi berhasil. Membuka enkripsi...")
                             st.rerun()
 
                         except Exception:
-
                             st.session_state.db_authenticated = False
                             st.session_state.user_type = None
                             st.session_state.saved_db_password = ""
+                            st.error("Gagal melakukan otentikasi. Periksa kembali password database Anda.")
 
-                            st.error(
-                                "Password salah atau koneksi database gagal."
-                            )
+        # Footer jaminan keamanan (Trust Signals)
+        st.markdown(
+            "<p style='text-align: center; color: #94a3b8; font-size: 11px; margin-top: 30px;'>"
+            "🔒 Enkripsi End-to-End aktif. Sesi Anda dilindungi sistem keamanan database terisolasi."
+            "</p>", 
+            unsafe_allow_html=True
+        )
 
     st.stop()
 

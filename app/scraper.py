@@ -252,12 +252,13 @@ def ambil_feed_google_news(keyword):
 
 
 def run_scraper_pipeline(keyword, on_progress=None, on_status=None):
-    """Pipeline scraper utama yang mendukung multi-keyword dipisahkan koma."""
+    """Pipeline scraper utama yang mendukung multi-keyword (koma) dan sinonim (pipa)."""
     if not keyword or not keyword.strip():
         if on_status:
             on_status("⚠️ Keyword pencarian kosong.")
         return pd.DataFrame()
 
+    # 1. Pecah input user berdasarkan koma untuk mendapatkan daftar topik utama
     list_keyword = [k.strip() for k in keyword.split(",") if k.strip()]
     total_keywords = len(list_keyword)
     df_gabungan = pd.DataFrame()
@@ -268,9 +269,12 @@ def run_scraper_pipeline(keyword, on_progress=None, on_status=None):
             on_status(pesan)
 
     for kw_idx, kw_target in enumerate(list_keyword):
+        # kw_target di sini bisa berupa kata tunggal "papua" 
+        # atau kombinasi sinonim "kecerdasan buatan | AI"
         update_status(f"🔍 [{kw_idx + 1}/{total_keywords}] Memulai pencarian untuk: '{kw_target}'...")
         
         try:
+            # Fungsi ini sekarang otomatis menangani operator OR jika ada tanda '|'
             feed = ambil_feed_google_news(kw_target)
             berita_items = feed.get("entries", []) or []
         except Exception as e:
@@ -308,6 +312,7 @@ def run_scraper_pipeline(keyword, on_progress=None, on_status=None):
         update_status(f"⏳ [{kw_target}] Mengunduh {total_proses} artikel secara paralel...")
         
         with ThreadPoolExecutor(max_workers=8) as executor:
+            # Kirim kw_target (termasuk string sinonimnya jika ada) ke worker thread
             futu_ke_item = {executor.submit(proses_tunggal_item, item, kw_target): item for item in items_to_process}
             
             for index, future in enumerate(as_completed(futu_ke_item)):
