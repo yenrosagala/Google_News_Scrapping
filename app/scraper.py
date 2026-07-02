@@ -255,7 +255,7 @@ def ambil_feed_google_news(keyword):
     kw_clean = " ".join(keyword.strip().split())
     
     # Bungkus keyword utuh dalam tanda petik ganda, misal: "bps papua"
-    query_target = f'"{kw_clean}"'
+    query_target = f'{kw_clean}'
     
     logging.info(f"📡 Query Exact Match dikirim ke Google News: {query_target}")
     
