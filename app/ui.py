@@ -531,7 +531,7 @@ def render_app():
 
                     if existing_summary:
                         # 🟢 JIKA ADA: Langsung tampilkan hasil summary yang tersimpan sebelumnya
-                        st.success(f"### 📊 Executive Summary: {target_keyword}")
+                        st.success(f"### 📊 Executive Summary by AI: {target_keyword}")
                         st.markdown(existing_summary)
                     else:
                         # 🔴 JIKA TIDAK ADA: Tampilkan info & tombol generate yang lama
