@@ -6,6 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from streamlit_plotly_events import plotly_events
 from googlenewsdecoder import gnewsdecoder
+import plotly.graph_objects as go
 
 from app.database import (
     cek_autentikasi_manual,
@@ -178,34 +179,205 @@ def render_app():
     cek_autentikasi_manual()
     inisialisasi_database()
 
+    # =========================================================================
+    # 🎨 INTEGRASI TOTAL CSS PREMIERE - DASHBOARD, LOGIN & SIDEBAR
+    # =========================================================================
     st.markdown("""
     <style>
-        .main .block-container { padding-top: 2rem; padding-bottom: 2rem; }
-        .main-title { background: linear-gradient(90deg, #0078D4, #106EBE); padding: 25px; border-radius: 12px; color: white; margin-bottom: 1.5rem; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
-        .main-title h1 { margin: 0; font-size: 2.5rem; font-weight: 600; }
-        .main-title p { margin: 0.5rem 0 0 0; font-size: 1.1rem; opacity: 0.9; }
-        .kpi-box { background: linear-gradient(135deg, #0078D4 0%, #106EBE 100%); padding: 20px; border-radius: 10px; color: white; text-align: center; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); transition: all 0.2s ease; }
-        .kpi-box:hover { transform: translateY(-3px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); }
-        .kpi-label { font-size: 0.85rem; opacity: 0.9; margin-bottom: 8px; font-weight: 500; }
-        .kpi-value { font-size: 2rem; font-weight: 700; color: #FFFFFF; }
-        .stButton>button { border-radius: 6px; font-weight: 500; }
-        .stButton>button[kind="primary"] { background-color: #0078D4; color: white; }
-        .stButton>button[kind="secondary"] { background-color: #F3F2F1; color: #323130; border: 1px solid #C8C6C4; }
-        .stButton>button:hover { opacity: 0.9; }
-        [data-testid="stSidebar"] { background-color: #F3F2F1; border-right: 1px solid #E1DFDD; }
-        .stDataFrame { border-radius: 8px; overflow: hidden; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06); }
-        .stTabs [data-baseweb="tab-list"] { gap: 24px; background-color: #F8F8F8; padding: 8px; border-radius: 8px; }
-        .stTabs [data-baseweb="tab"] { padding: 12px 20px; font-weight: 500; color: #605E5C; }
-        .stTabs [aria-selected="true"] { background-color: #0078D4; color: white; border-radius: 6px; }
-        [data-testid="stDialog"] { border-radius: 12px; }
-        .footer { text-align: center; padding: 1rem; color: #605E5C; font-size: 0.9rem; border-top: 1px solid #E1DFDD; margin-top: 2rem; }
+           
+            /* 1. Backdrop Background Image */
+            html, body, .stApp, [data-testid="stAppViewContainer"] {
+                background-image: url("https://cdn.jsdelivr.net/gh/yenrosagala/Google_News_Scrapping@main/5630939.jpg") !important;
+                background-size: cover !important;
+                background-attachment: fixed !important;
+            }
+
+            /* 2. Style untuk Kartu Login Utama (Premium Card) */
+            .premium-card {
+                background: rgba(15, 23, 42, 0.75) !important; /* Biru gelap transparan */
+                backdrop-filter: blur(20px) !important;
+                -webkit-backdrop-filter: blur(20px) !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                border-radius: 20px !important;
+                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4) !important;
+                padding: 3rem !important;
+            }
+
+            /* 3. Style untuk Tab Panel (Login Tabs) */
+            div[data-baseweb="tab-panel"] {
+                background: rgba(30, 41, 59, 0.7) !important;
+                backdrop-filter: blur(15px) !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+                border-radius: 16px !important;
+                padding: 20px !important;
+            }
+
+            /* 4. Text Styling (Wajib Putih agar terlihat di background gelap) */
+            .premium-title, .premium-subtitle, .stMarkdown p, .stMarkdown strong, label span {
+                color: #FFFFFF !important;
+            }
+
+            /* 5. Styling untuk Box Info (Mode Peninjau & Admin) */
+            div[style*="background-color: rgb(248, 250, 252)"], 
+            div[style*="background-color: rgb(239, 246, 255)"] {
+                background: rgba(255, 255, 255, 0.08) !important;
+                color: #E2E8F0 !important;
+                border-left: 4px solid #38BDF8 !important;
+                border-radius: 0 8px 8px 0 !important;
+            }
+
+            /* 6. Input Kredensial Password */
+            input {
+                background: rgba(255, 255, 255, 0.05) !important;
+                color: #FFFFFF !important;
+                border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            }
+
+            /* 7. Footer */
+            p[style*="text-align: center"] {
+                color: #94A3B8 !important;
+            }
+
+
+                
+                /* Perbaikan: Memastikan .main-title memiliki style sendiri yang tidak tertimpa */
+        .main-title { 
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.92) 100%) !important; 
+            padding: 38px 35px !important; 
+            border-radius: 16px !important; 
+            color: #FFFFFF !important; 
+            margin-bottom: 2rem !important; 
+            border: 1px solid #334155 !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12) !important;
+            /* Menambah properti display untuk memastikan box dirender dengan benar */
+            display: block !important; 
+            width: 100% !important;
+        }
+
+        /* Memastikan teks di dalamnya tidak ikut transparan */
+        .main-title h1, .main-title p {
+            color: #FFFFFF !important;
+            opacity: 1 !important;
+        }
+        /* 1. BACKDROP GLOBAL */
+        header { visibility: hidden; }
+        footer { visibility: hidden; }
+
+        html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stApp"], [data-testid="stMainBlockContainer"] {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #0F172A !important;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(224, 242, 254, 0.45) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(243, 232, 255, 0.45) 0px, transparent 50%),
+                linear-gradient(rgba(248, 250, 252, 0.4), rgba(248, 250, 252, 0.4)),
+                url("https://cdn.jsdelivr.net/gh/yenrosagala/Google_News_Scrapping@main/5630939.jpg") !important;
+            background-size: cover !important;
+            background-attachment: fixed !important;
+        }
+
+        /* 2. SIDEBAR KONTROL PANEL (REVISI: Kotak Transparan Menu Scraping) */
+        [data-testid="stSidebar"] { 
+            background-color: rgba(15, 23, 42, 0.8) !important; 
+            backdrop-filter: blur(20px) !important;
+        }
+
+        /* Kotak Putih Transparan pada Menu Utama Scraping di Sidebar */
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+            background-color: rgba(255, 255, 255, 0.85) !important;
+            padding: 20px !important;
+            border-radius: 16px !important;
+            border: 1px solid rgba(255, 255, 255, 0.3) !important;
+            margin: 10px !important;
+        }
+
+        /* Teks dalam kotak Sidebar agar gelap & kontras */
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] h3,
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] p,
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] label {
+            color: #0F172A !important;
+            font-weight: 600 !important;
+        }
+
+        /* 3. DASHBOARD MAIN CONTAINER */
+        [data-testid="stMainSpaceBlockContainer"] {
+            background: rgba(129, 192, 192, 0.94) !important;
+            backdrop-filter: blur(20px) !important;
+            border-radius: 20px;
+            padding: 2.5rem !important;
+        }
+
+        .kpi-label { 
+                font-size: 0.8rem;                /* Ukuran teks kecil */
+                color: #94A3B8 !important;         /* Warna abu-abu Slate-400 */
+                margin-bottom: 10px;              /* Jarak bawah ke angka */
+                font-weight: 700;                 /* Ketebalan huruf */
+                text-transform: uppercase;        /* Membuat huruf jadi kapital semua */
+                letter-spacing: 0.05em;           /* Spasi antar huruf agar terlihat elegan */
+            }
+        /* 4. HALAMAN LOGIN (PREMIUM CARD) */
+        .premium-card {
+            background: rgba(15, 23, 42, 0.85) !important;
+            backdrop-filter: blur(20px) !important;
+            padding: 3rem 2.5rem !important;
+            border-radius: 20px !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+        }
+        
+        .premium-title, .premium-subtitle { color: #FFFFFF !important; }
+        .premium-card input { background-color: rgba(255, 255, 255, 0.1) !important; color: white !important; }
+
+        /* 5. TABS & KPI */
+        div[data-baseweb="tab-panel"] {
+            background-color: rgba(192, 192, 192, 0.80) !important;
+            border-radius: 16px !important;
+            padding: 30px !important;
+        }
+        
+        .kpi-box { 
+            background: rgba(15, 23, 42, 0.88) !important;
+            padding: 26px 20px; 
+            border-radius: 16px; 
+            text-align: center;
+        }
+        .kpi-value { color: #38BDF8 !important; font-weight: 800; font-size: 2.5rem; }
+                
+        /* Revisi Ukuran Huruf Tab */
+        .stTabs [data-baseweb="tab"] p {
+            font-size: 16px !important;    /* Sesuaikan ukuran (default biasanya 14px) */
+            font-weight: 600 !important;    /* Menambah ketebalan agar lebih terbaca */
+            margin: 0 !important;
+        }
+
+        /* Opsional: Menyesuaikan tinggi tab agar proporsional dengan font yang lebih besar */
+        .stTabs [data-baseweb="tab"] {
+            height: 50px !important;       /* Sedikit ditinggikan agar pas dengan teks besar */
+        }
+                
+                /* Styling untuk Box Judul Sidebar */
+        .sidebar-box {
+            background: rgba(15, 23, 42, 0.1) !important; /* Efek kaca tipis */
+            backdrop-filter: blur(10px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border-radius: 12px !important;
+            padding: 15px !important;
+            margin-bottom: 20px !important;
+            text-align: center;
+        }
+
+        .sidebar-box h3 {
+            margin: 0 !important;
+            color: #FFFFFF !important; /* Teks putih agar kontras */
+            font-size: 1.2rem !important;
+        }
     </style>
     """, unsafe_allow_html=True)
-
+    
+    # Header HTML Kustom yang Meniru File .txt yang Anda Upload
     st.markdown("""
     <div class="main-title">
         <h1>📰 News Intelligence Dashboard</h1>
-        <p>Google News Scraping • Sentiment Analysis • Real-time Monitoring</p>
+        <p>Google News Scraping • Sentiment Analysis • AI Executive Reporting</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -224,7 +396,11 @@ def render_app():
                     st.session_state.active_keyword = [str(raw_kw).strip()]
 
     with st.container():
-        st.markdown("### 🚀 Menu Utama Scraping")
+        st.markdown("""
+            <div class="sidebar-box">
+                <h3>🚀 Menu Utama Scraping</h3>
+            </div>
+            """, unsafe_allow_html=True)
         keyword = st.text_input("🔍 Keyword Pencarian Baru", placeholder="Contoh: Inflasi Papua")
 
         if st.button("🔥 Jalankan Scraping", width='stretch', type="primary"):
@@ -334,13 +510,17 @@ def render_app():
             filtered_df = filtered_df[mask]
 
         total_berita = len(filtered_df)
+        berita_dengan_isi = filtered_df["isi_konten"].notna().sum()
         jumlah_media = filtered_df["media"].nunique()
         jumlah_keyword = filtered_df["kata_kunci"].nunique()
     else:
-        total_berita, jumlah_media, jumlah_keyword = 0, 0, 0
+        total_berita, berita_dengan_isi, jumlah_media, jumlah_keyword = 0, 0, 0, 0
         filtered_df = pd.DataFrame()
 
-    kpi1, kpi2, kpi3 = st.columns(3)
+    # KPI Cards Bergaya Premium Baru
+    kpi1, kpi2, kpi3= st.columns(3)
+
+        
     with kpi1:
         st.markdown(f'<div class="kpi-box"><div class="kpi-label">📰 Total Berita</div><div class="kpi-value">{total_berita:,}</div></div>', unsafe_allow_html=True)
     with kpi2:
@@ -353,15 +533,14 @@ def render_app():
         st.subheader("📋 Ringkasan Eksekutif")
         
         active_keywords = selected_keyword if selected_keyword else []
-
-        # 📊 MENAMPILKAN CAPTION DINAMIS BERDASARKAN ACTIVE KEYWORD
+        
+        # Tampilan Caption Dinamis Sesuai Active Keyword
         if active_keywords:
-            # Menggabungkan list keyword menjadi string cantik dipisahkan oleh tanda buletin/pipa
             keyword_badge = " • ".join([f"**{kw}**" for kw in active_keywords])
             st.caption(f"💡 Menampilkan analisis ringkasan eksekutif otomatis berbasis kecerdasan buatan untuk topik pencarian: {keyword_badge}")
         else:
             st.caption("ℹ️ Menampilkan kumulatif analisis seluruh database berita (Belum ada filter kata kunci aktif yang dipilih).")
-        keyword_str = ", ".join(active_keywords) if active_keywords else "All"
+            
         date_range_str = f"{start_date} sampai {end_date}" if (start_date and end_date) else "all_time"
         periode_str = f"period_{date_range_str}" 
 
@@ -388,7 +567,6 @@ def render_app():
                 st.markdown(f"**Statistik Harian**\n- Rata-rata: {trend_harian.mean():.0f} berita/hari\n- Puncak: {trend_harian.max()} berita\n- Terendah: {trend_harian.min()} berita")
             
             st.divider()
-            
             st.markdown("**Insights Utama**")
             insights = []
             if persen_positif > persen_negatif:
@@ -401,9 +579,10 @@ def render_app():
             if len(top_media) > 0:
                 insights.append(f"📰 Media dominan: {top_media.index[0]} dengan {top_media.values[0]} artikel")
             
-                        
+            total_isi = filtered_df["isi_konten"].notna().sum()
+            insights.append(f"📄 {(total_isi / len(filtered_df) * 100):.1f}% berita memiliki isi lengkap")
+            
             for insight in insights:
-                # 🟢 Mengganti tanda '•' menjadi '-' agar konsisten dengan file generator PDF
                 st.write(f"- {insight}")
             
             st.divider()
@@ -420,6 +599,7 @@ def render_app():
                 target_keywords_list = [kw.strip().title() for kw in input_keyword.split(",") if kw.strip()]
                 
                 if target_keywords_list:
+                    st.caption(f"🔍 **Kata kunci aktif digabungkan (Logika OR):** " + " • ".join([f"`{k}`" for k in target_keywords_list]))
                     regex_pattern = "|".join([re.escape(kw) for kw in target_keywords_list])
                     filtered_data = filtered_df[filtered_df['kata_kunci'].astype(str).str.contains(regex_pattern, case=False, na=False)]
                 else:
@@ -678,22 +858,58 @@ def render_app():
                         except Exception as main_e:
                             st.error(f"Terjadi kesalahan internal sistem: {main_e}")
         else:
-            st.info("Tidak ada data untuk ditampilkan.")
+            st.info("❌ Tidak ada data untuk ditampilkan.")
 
     with tab2:
         st.subheader("📈 Visualisasi Data")
+         # Misal fig adalah objek figur plotly Anda
         if len(filtered_df) > 0:
             col1, col2 = st.columns([1, 1], gap="large")
+            
+            # Helper untuk layout transparan agar tidak perlu menulis ulang
+            def set_transparent_layout(fig, title_text):
+                fig.update_layout(
+                    title=title_text,
+                    paper_bgcolor='rgba(0,0,0,0)',
+                    plot_bgcolor='rgba(0,0,0,0)',
+                    font_color="#060911", # Menyesuaikan teks judul agar tetap terlihat di atas background transparan
+                    margin=dict(l=20, r=20, t=50, b=20)
+                )
+                return fig
+
             with col1:
                 sentimen_count = filtered_df["Sentimen"].value_counts().reset_index()
                 sentimen_count.columns = ["Sentimen", "Jumlah"]
-                fig_sentimen = px.pie(sentimen_count, names="Sentimen", values="Jumlah", title="Distribusi Sentimen", color="Sentimen", color_discrete_map={"Positif": "#4CAF50", "Negatif": "#F44336", "Netral": "#9E9E9E"}, hole=0.5)
-                st.plotly_chart(fig_sentimen, width='stretch')
+                
+                fig_sentimen = px.pie(
+                    sentimen_count, 
+                    names="Sentimen", 
+                    values="Jumlah", 
+                    color="Sentimen", 
+                    color_discrete_map={"Positif": "#4CAF50", "Negatif": "#F44336", "Netral": "#9E9E9E"}, 
+                    hole=0.5
+                )
+                fig_sentimen = set_transparent_layout(fig_sentimen, "Distribusi Sentimen")
+                st.plotly_chart(fig_sentimen, use_container_width=True)
+
             with col2:
                 top_10_m = filtered_df["media"].value_counts().head(10).reset_index()
                 top_10_m.columns = ["Media", "Jumlah"]
-                fig_media = px.bar(top_10_m, x="Jumlah", y="Media", orientation="h", title="Top 10 Media", color_continuous_scale="Blues")
-                st.plotly_chart(fig_media, width='stretch')
+                
+                fig_media = px.bar(
+                    top_10_m, 
+                    x="Jumlah", 
+                    y="Media", 
+                    orientation="h"
+                )
+                # Tambahan: Mengatur warna bar agar konsisten dengan tema premium
+                fig_media.update_traces(marker_color='#38BDF8')
+                
+                fig_media = set_transparent_layout(fig_media, "Top 10 Media")
+                fig_media.update_yaxes(showgrid=False) # Hilangkan grid agar bersih
+                fig_media.update_xaxes(showgrid=False)
+                
+                st.plotly_chart(fig_media, use_container_width=True)
         else:
             st.info("Tidak ada data untuk grafik.")
 
