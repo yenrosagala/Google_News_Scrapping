@@ -223,7 +223,7 @@ def render_app():
     # Pre-fetch data awal untuk menentukan default filter keyword terakhir
     df = ambil_data_dari_db()
     
-    # LOGIKA FILTER KEYWORD DEFAULT AMAN DARI PECAHAN KOMA
+    # LOGIKA FILTER KEYWORD DEFAULT (DATABASE TERBARU / SCRAPING TERBARU)
     if "active_keyword" not in st.session_state:
         st.session_state.active_keyword = None
         if len(df) > 0:
@@ -231,6 +231,7 @@ def render_app():
             id_terakhir = df["waktu_tampilan"].idxmax()
             if pd.notna(id_terakhir):
                 raw_kw = df.loc[id_terakhir, "kata_kunci"]
+                # Mengakomodasi pemisahan multi-keyword hasil scraping baru jika dipisah tanda koma
                 if "," in str(raw_kw):
                     st.session_state.active_keyword = [k.strip() for k in str(raw_kw).split(",") if k.strip()]
                 else:
@@ -255,7 +256,12 @@ def render_app():
                         on_progress=lambda p: progress_bar.progress(p),
                         on_status=lambda s: status_text.text(s)
                     )
-                    st.session_state.active_keyword = [keyword.strip()]
+                    # 💡 Jika scraping baru multi-keyword dipisah koma, pecah langsung ke state filter
+                    if "," in keyword:
+                        st.session_state.active_keyword = [k.strip() for k in keyword.split(",") if k.strip()]
+                    else:
+                        st.session_state.active_keyword = [keyword.strip()]
+                        
                     st.success("✅ Scraping selesai. Data telah diperbarui.")
                     st.rerun()
                 except Exception as e:
@@ -425,7 +431,7 @@ def render_app():
 
             # --- OFFICIAL GEMINI SYSTEM EXPANDER ---
             with st.expander("📝 Ringkasan Eksekutif Konten (Official Gemini Client)", expanded=True):
-                # 🟢 REVISI: Menggabungkan seluruh keyword aktif dari filter sidebar dengan pemisah koma sebagai default value
+                # 🟢 REVISI UTAMA: Nilai bawaan (value) otomatis mengambil dan menggabungkan SEMUA keyword terpilih di filter sidebar
                 joined_default_keywords = ", ".join(active_keywords) if active_keywords else "Inflasi Papua"
                 
                 input_keyword = st.text_input(
@@ -437,7 +443,7 @@ def render_app():
                 target_keywords_list = [kw.strip().title() for kw in input_keyword.split(",") if kw.strip()]
                 
                 if target_keywords_list:
-                    # 🟢 PERBAIKAN: Menggunakan OR LOGIC (A|B) agar data gabungan terkumpul dan tidak kosong
+                    # Menggunakan OR LOGIC (A|B) agar semua berita dari kata kunci yang dipilih digabung jadi satu kesatuan esai
                     regex_pattern = "|".join([re.escape(kw) for kw in target_keywords_list])
                     filtered_data = filtered_df[filtered_df['kata_kunci'].astype(str).str.contains(regex_pattern, case=False, na=False)]
                 else:
@@ -449,7 +455,7 @@ def render_app():
                 display_title_keyword = ", ".join(target_keywords_list) if target_keywords_list else "Inflasi Papua"
                 
                 if filtered_data.empty:
-                    st.warning(f"Data tidak ditemukan untuk kombinasi kata kunci: {target_keywords_list}")
+                    st.warning(f"Data tidak ditemukan untuk kecocokan kombinasi kata kunci: {target_keywords_list}")
                 else:
                     date_min = filtered_data['waktu_tampilan'].dropna().min()
                     date_max = filtered_data['waktu_tampilan'].dropna().max()
@@ -534,11 +540,19 @@ def render_app():
                             t_media_str = ", ".join([f"{m} ({c} artikel)" for m, c in t_media.items()])
                             clean_df = filtered_data.dropna(subset=['isi_konten', 'judul', 'media'])
                             
+                            # 🟢 REVISI: Stratified Sampling Proporsional Berdasarkan Sentimen (Total Sampel 25%)
+                            if len(clean_df) > 10:
+                                # Mengelompokkan berdasarkan kolom 'Sentimen' dan mengambil 25% sampel secara proporsional dari masing-masing kelompok
+                                clean_df = clean_df.groupby('Sentimen', group_keys=False).apply(
+                                    lambda x: x.sample(frac=0.25, random_state=42) if len(x) > 0 else x
+                                )
+                            else:
+                                clean_df = clean_df
+
+                            # Logika penentu catatan instruksi ke Gemini berdasarkan status cache
                             if st.session_state[state_status_key] == "Versi Cache":
-                                clean_df = clean_df.sample(frac=0.15, random_state=42) if len(clean_df) > 10 else clean_df
                                 catatan_regenerate = "\n- CATATAN TAMBAHAN: Data ini merupakan gabungan komprehensif dari data historis dan hasil scraping terbaru. Soroti tren pergerakan atau perubahan situasi terbaru jika terdeteksi."
                             else:
-                                clean_df = clean_df.sample(frac=0.10, random_state=42) if len(clean_df) > 10 else clean_df
                                 catatan_regenerate = ""
                                 
                             formatted_articles = [f"--- ARTIKEL: {row['judul']} ({row['media']}) ---\n{row['isi_konten']}" for _, row in clean_df.iterrows()]
@@ -547,32 +561,102 @@ def render_app():
                                 concatenated_content = concatenated_content[:120000] + "\n\n... [Sisa konten dipotong demi efisiensi konteks] ..."
 
                             prompt_instruksi = f"""
-                            Judul Tugas: Analisis Berita Eksekutif Komprehensif (Metode Terintegrasi 5W+1H)
+                            **Judul Tugas: Analisis Berita Eksekutif Komprehensif**
 
-                            Instruksi Utama:
-                            Buatlah sebuah analisis berita eksekutif yang mendalam dan komprehensif dalam bentuk ESSAI MURNI mengalir (narrative essay). Jangan menggunakan sub-judul kaku untuk masing-masing poin 5W+1H (seperti "WHAT:", "WHO:", dll), melainkan leburkan seluruh unsur tersebut secara organis, mengalir, dan profesional ke dalam paragraf-paragraf esai. {catatan_regenerate}
+                            ### Instruksi Utama
 
-                            I. PEDOMAN METADATA & KONTEKS (Wajib ditulis di paragraf pembuka secara natural):
-                            - Profil Kata Kunci yang Dianalisis: {display_title_keyword}
-                            - Cakupan Rentang Tanggal (waktu_tampil): {date_range_str}
-                            - 3 Kontributor Media Teratas: {t_media_str}
+                            Buatlah sebuah analisis berita eksekutif yang mendalam dan komprehensif dalam bentuk **esai naratif (narrative essay)** yang mengalir. Jangan menggunakan subjudul kaku untuk masing-masing unsur 5W+1H (WHAT, WHO, WHEN, WHERE, WHY, HOW), melainkan integrasikan seluruh unsur tersebut secara alami ke dalam paragraf-paragraf esai. {catatan_regenerate}
 
-                            II. KERANGKA ESSAI (Integrasikan seluruh poin ini ke dalam narasi esai):
-                            Berdasarkan kolom isi_konten pada data gabungan, narasikan:
-                            - Peristiwa utama, pengumukan, kebijakan, atau isu krusial yang dilaporkan terkait tren inflasi.
-                            - Individu, organisasi, institusi (seperti BI, Pemda, Bulog, BPS) yang terlibat aktif atau terdampak dalam pemberitaan.
-                            - Linimasa atau waktu terjadinya peristiwa-peristiwa penting tersebut berdasarkan data artikel.
-                            - Cakupan geografis daerah yang memberikan dampak atau terdampak terbesar di wilayah Papua (seperti Jayapura, Nabire, Keerom, dll).
-                            - Akar penyebab atau faktor pendorong mengapa situasi inflasi tersebut terjadi (seperti kendala logistik, wabah penyakit ternak, regulasi subsidi).
-                            - Bagaimana situasi tersebut berkembang saat ini serta bagaimana respons taktis, operasi pasar, atau strategi jangka panjang yang dilakukan oleh pihak berwenang.
+                            ---
 
-                            III. KETENTUAN FORMAT & GAYA BAHASA:
-                            - Gunakan bahasa Indonesia formal, objektif, dan analitis.
-                            - Gunakan teknik tebal (bolding) pada frasa kunci atau angka penting untuk menjaga scannability (keterbacaan cepat) agar laporan mudah dipahami oleh tingkat eksekutif.
-                            - Hindari penggunaan poin-poin (bullet points) di bagian inti analisis; pertahaman struktur narasi esai yang padat dan berisi.
+                            ### I. Pedoman Metadata & Konteks
 
-                            KORPUS BERITA:
+                            Pada paragraf pembuka, jelaskan secara natural informasi berikut:
+
+                            * Profil Kata Kunci yang Dianalisis: {target_keyword}
+                            * Cakupan Rentang Tanggal (waktu_tampil): {date_range_str}
+                            * 3 Kontributor Media Teratas: {t_media_str}
+
+                            ---
+
+                            ### II. Kerangka Esai
+
+                            Berdasarkan kolom **isi_konten** pada data gabungan, lakukan analisis yang mencakup secara terpadu:
+
+                            * Peristiwa utama, pengumuman, kebijakan, maupun isu strategis yang diberitakan terkait tren inflasi.
+                            * Individu, organisasi, maupun institusi (misalnya BI, BPS, Bulog, Pemerintah Daerah, kementerian, pelaku usaha) yang berperan atau terdampak.
+                            * Kronologi perkembangan isu berdasarkan waktu publikasi artikel.
+                            * Wilayah Papua yang menjadi pusat perhatian atau terdampak terbesar (Jayapura, Nabire, Keerom, Mimika, dan sebagainya).
+                            * Faktor penyebab utama yang memengaruhi kondisi inflasi.
+                            * Perkembangan situasi terkini beserta respons pemerintah, operasi pasar, kebijakan, maupun strategi jangka panjang.
+
+                            ---
+
+                            ### III. Ketentuan Sitasi (WAJIB)
+
+                            * Gunakan **sitasi numerik** dengan format **[1]**, **[2]**, **[3]**, dan seterusnya.
+                            * Nomor referensi diberikan **berdasarkan pertama kali sumber muncul di dalam esai**.
+                            * Jika sumber yang sama digunakan kembali pada bagian lain, gunakan **nomor yang sama**, jangan membuat nomor baru.
+                            * Sitasi ditempatkan pada akhir kalimat atau akhir paragraf yang memuat informasi dari sumber tersebut.
+
+                            Contoh:
+
+                            > Harga cabai merah mengalami kenaikan akibat terganggunya distribusi antardaerah menjelang hari besar keagamaan **[1]**.
+
+                            atau
+
+                            > Pemerintah daerah bersama Bulog meningkatkan intensitas operasi pasar sebagai langkah stabilisasi harga **[2][5]**.
+
+                            * Apabila suatu kalimat disusun dari beberapa artikel, cantumkan seluruh nomor referensi yang relevan, misalnya **[2][4][7]**.
+                            * Jangan membuat sitasi terhadap sumber yang tidak terdapat pada korpus berita.
+                            * Jangan mengarang informasi bibliografi.
+
+                            ---
+
+                            ### IV. Daftar Pustaka (WAJIB)
+
+                            Setelah esai selesai, buat bagian:
+
+                            # Daftar Pustaka
+
+                            Ketentuannya:
+
+                            * Daftar pustaka disusun **berdasarkan nomor referensi**, bukan alfabet.
+                            * Nomor pada daftar pustaka **harus sama persis** dengan nomor sitasi yang digunakan dalam esai.
+                            * Setiap nomor hanya muncul satu kali.
+                            * Jangan menambahkan referensi yang tidak pernah disitasi.
+
+                            Gunakan format berikut:
+
+                            [1] Nama Media. Tanggal Publikasi. *Judul Artikel*. URL
+
+                            Apabila URL tidak tersedia:
+
+                            [1] Nama Media. Tanggal Publikasi. *Judul Artikel*.
+
+                            Contoh:
+
+                            [1] Kompas. 15 Juni 2026. *Harga Cabai di Papua Naik akibat Gangguan Distribusi*.
+
+                            [2] Antara. 17 Juni 2026. *Bulog Gelar Operasi Pasar di Jayapura*.
+
+                            ---
+
+                            ### V. Ketentuan Format & Gaya Bahasa
+
+                            * Gunakan bahasa Indonesia formal, objektif, akademis, dan analitis.
+                            * Gunakan **bold** pada frasa penting, angka strategis, nama kebijakan, indikator utama, atau temuan penting agar mudah dipindai oleh pembaca tingkat eksekutif.
+                            * Hindari bullet point pada bagian isi analisis.
+                            * Pertahankan alur narasi yang runtut dari pembukaan, analisis, hingga penutup.
+                            * Jangan menambahkan informasi di luar korpus berita.
+                            * Jika terdapat perbedaan informasi antarartikel, jelaskan secara objektif dengan tetap memberikan sitasi yang sesuai.
+
+                            ---
+
+                            ### KORPUS BERITA
+
                             {concatenated_content}
+
                             """
                             
                             daftar_model_fallback = [
@@ -599,7 +683,6 @@ def render_app():
                                     st.toast(f"🔄 {model_name} sibuk/gagal, mencoba cadangan berikutnya...", icon="⚠️")
                                     continue
 
-                            # Munculkan error kumulatif hanya jika seluruh model gagal total
                             if response_stream is None:
                                 error_summary = "\n".join(list_errors)
                                 st.error(
@@ -660,4 +743,4 @@ def render_app():
         else:
             st.info("❌ Tidak ada data berita.")
 
-    st.markdown("<br><hr><div class='footer'>© 2026 | News Intelligence Dashboard | Yenro P Sagala - BPS Provinsi Papua</div>", unsafe_allow_html=True)
+    st.markdown("<br><hr><div class='footer'>© 2026 | News Intelligence Dashboard | Yenro PSagala - BPS Provinsi Papua</div>", unsafe_allow_html=True)
