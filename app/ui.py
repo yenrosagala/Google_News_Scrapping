@@ -24,79 +24,137 @@ import nltk
 import re
 
 # Download required NLTK data
+# Download required NLTK data
 try:
     nltk.data.find('tokenizers/punkt')
 except LookupError:
     nltk.download('punkt', quiet=True)
 
+# FIX: Tambahkan ini agar stopwords otomatis terunduh jika belum ada
+try:
+    nltk.data.find('corpora/stopwords')
+except LookupError:
+    nltk.download('stopwords', quiet=True)
 
 # ======================================================
 # HELPER FUNCTION - EXECUTIVE SUMMARY GENERATOR
 # ======================================================
 @st.cache_data
-def buat_ringkasan_eksekutif(dataframe, num_sentences=5):
+# 🟢 Sesuaikan parameter fungsi dengan menambahkan kata_kunci dan rentang_waktu
+@st.cache_data
+def buat_ringkasan_eksekutif(dataframe, kata_kunci, rentang_waktu, num_sentences=5):
     """
-    Membuat ringkasan eksekutif dari seluruh konten artikel menggunakan extractive summarization.
+    Membuat ringkasan eksekutif dari seluruh konten artikel menggunakan extractive summarization
+    dengan sistem caching otomatis ke database.
     """
+    from app.database import dapatkan_koneksi_db, IS_POSTGRES
+    import nltk
+    
+    # 🔴 FORCE DOWNLOAD: Paksa unduh langsung di dalam fungsi untuk memastikan resource tersedia
+    for res in ['tokenizers/punkt', 'corpora/stopwords']:
+        try:
+            nltk.data.find(res)
+        except LookupError:
+            nltk.download(res.split('/')[-1], quiet=True)
+            
+    from nltk.tokenize import sent_tokenize
+    from nltk.corpus import stopwords
+
+    if dataframe.empty:
+        return "Tidak ada data artikel yang tersedia untuk diringkas."
+
+    # -------------------------------------------------------------------------
+    # 1. CEK KE DATABASE TERLEBIH DAHULU (CACHE HIT)
+    # -------------------------------------------------------------------------
     try:
-        # Kumpulkan semua konten artikel
+        conn = dapatkan_koneksi_db()
+        cursor = conn.cursor()
+        
+        if IS_POSTGRES:
+            query_cek = """
+                SELECT hasil_summary FROM executive_summary 
+                WHERE kata_kunci = %s AND rentang_waktu = %s 
+                ORDER BY waktu_dibuat DESC LIMIT 1
+            """
+        else:
+            query_cek = """
+                SELECT hasil_summary FROM executive_summary 
+                WHERE kata_kunci = ? AND rentang_waktu = ? 
+                ORDER BY waktu_dibuat DESC LIMIT 1
+            """
+        
+        cursor.execute(query_cek, (str(kata_kunci), str(rentang_waktu)))
+        row = cursor.fetchone()
+        
+        if row:
+            cursor.close()
+            conn.close()
+            return row[0]  # ⚡ Kembalikan hasil langsung jika sudah ada di DB
+            
+    except Exception as e:
+        pass  # Jika tabel belum dibuat, abaikan dan lanjut ke pembuatan manual
+
+    # -------------------------------------------------------------------------
+    # 2. JIKA CACHE TIDAK ADA, JALANKAN LOGIKA TEXT SUMMARIZATION (CACHE MISS)
+    # -------------------------------------------------------------------------
+    try:
         konten_semua = dataframe["isi_konten"].dropna()
         konten_semua = konten_semua[konten_semua.str.len() > 0]
         
         if len(konten_semua) == 0:
             return "Tidak ada konten artikel yang tersedia untuk diringkas."
         
-        # Gabungkan semua konten
-        teks_gabungan = " ".join(konten_semua.astype(str))
+        text = " ".join(konten_semua.tolist())
+        text = re.sub(r'\[.*?\]', '', text)
+        sentences = sent_tokenize(text)
         
-        if len(teks_gabungan.strip()) < 100:
-            return "Konten artikel terlalu singkat untuk diringkas."
-        
-        # Tokenisasi kalimat
-        try:
-            kalimat = sent_tokenize(teks_gabungan, language='english')
-        except:
-            # Fallback jika tokenizer gagal
-            kalimat = re.split(r'[.!?]+', teks_gabungan)
-            kalimat = [k.strip() for k in kalimat if k.strip()]
-        
-        if len(kalimat) < 2:
-            return "Konten artikel terlalu singkat untuk diringkas."
-        
-        # Hitung TF-IDF sederhana
-        words = re.findall(r'\w+', teks_gabungan.lower())
-        word_freq = {}
-        for word in words:
-            if len(word) > 3:  # Hanya kata dengan length > 3
-                word_freq[word] = word_freq.get(word, 0) + 1
-        
-        # Normalize
-        if word_freq:
-            max_freq = max(word_freq.values())
-            for word in word_freq:
-                word_freq[word] = word_freq[word] / max_freq
-        
-        # Hitung skor kalimat
-        skor_kalimat = {}
-        for i, kalimat_text in enumerate(kalimat):
-            skor = 0
-            words_kalimat = re.findall(r'\w+', kalimat_text.lower())
-            for word in words_kalimat:
-                skor += word_freq.get(word, 0)
-            skor_kalimat[i] = skor
-        
-        # Ambil top N kalimat
-        num_ringkas = min(num_sentences, len(kalimat))
-        top_kalimat = sorted(skor_kalimat.items(), key=lambda x: x[1], reverse=True)[:num_ringkas]
-        top_kalimat = sorted(top_kalimat, key=lambda x: x[0])  # Urutkan kembali sesuai urutan asli
-        
-        ringkasan = " ".join([kalimat[idx] for idx, _ in top_kalimat])
-        
-        return ringkasan if ringkasan.strip() else "Gagal membuat ringkasan dari konten artikel."
-        
-    except Exception as e:
-        return f"Error generating summary: {str(e)}"
+        if len(sentences) <= num_sentences:
+            summary_hasil = text
+        else:
+            stop_words = set(stopwords.words('indonesian')) if 'indonesian' in stopwords.fileids() else set()
+            words = re.findall(r'\w+', text.lower())
+            word_frequencies = {}
+            for word in words:
+                if word not in stop_words:
+                    word_frequencies[word] = word_frequencies.get(word, 0) + 1
+            
+            if word_frequencies:
+                max_frequency = max(word_frequencies.values())
+                for word in word_frequencies:
+                    word_frequencies[word] = word_frequencies[word] / max_frequency
+            
+            sentence_scores = {}
+            for sent in sentences:
+                for word in re.findall(r'\w+', sent.lower()):
+                    if word in word_frequencies:
+                        sentence_scores[sent] = sentence_scores.get(sent, 0) + word_frequencies[word]
+            
+            import heapq
+            summary_sentences = heapq.nlargest(num_sentences, sentence_scores, key=sentence_scores.get)
+            summary_hasil = " ".join(summary_sentences)
 
+        # -------------------------------------------------------------------------
+        # 3. SIMPAN HASIL BARU KE DATABASE SEBAGAI CACHE
+        # -------------------------------------------------------------------------
+        try:
+            conn = dapatkan_koneksi_db()
+            cursor = conn.cursor()
+            if IS_POSTGRES:
+                query_insert = "INSERT INTO executive_summary (kata_kunci, rentang_waktu, hasil_summary) VALUES (%s, %s, %s)"
+            else:
+                query_insert = "INSERT INTO executive_summary (kata_kunci, rentang_waktu, hasil_summary) VALUES (?, ?, ?)"
+                
+            cursor.execute(query_insert, (str(kata_kunci), str(rentang_waktu), summary_hasil))
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception as db_err:
+            pass
+
+    except Exception as e:
+        summary_hasil = f"Gagal membuat ringkasan eksekutif: {str(e)}"
+        
+    return summary_hasil
 
 # ======================================================
 # DEFINISI DIALOG
@@ -313,11 +371,77 @@ def render_app():
     # CHARTS & TABS
     # ======================================================
     tab1, tab2, tab3 = st.tabs(["📊 Analisis", "📈 Grafik", "📂 Data"])
-
     with tab1:
         st.subheader("📋 Ringkasan Eksekutif")
         
-        if len(filtered_df) > 0:
+        # 🟢 PERBAIKAN UTAMA: Amankan selected_keyword di awal agar tidak UnboundLocalError jika data kosong
+        try:
+            # Periksa apakah selected_keyword ada di level global/local streamlit
+            if 'selected_keyword' in locals() or 'selected_keyword' in globals():
+                active_keywords = selected_keyword if selected_keyword else []
+            else:
+                active_keywords = []
+        except NameError:
+            active_keywords = []
+
+        keyword_str = ", ".join(active_keywords) if active_keywords else "All"
+
+        # Amankan juga start_date dan end_date
+        try:
+            if start_date and end_date:
+                date_range_str = f"{start_date}_to_{end_date}"
+            else:
+                date_range_str = "all_time"
+        except NameError:
+            date_range_str = "all_time"
+            
+        periode_str = f"period_{date_range_str}" 
+
+        # --------------------------------------------------------------------
+        # Fungsi helper interaksi database cache (Anti-Error jika tabel kosong)
+        # --------------------------------------------------------------------
+        def cek_cache_summary_db(kata_kunci, rentang_waktu):
+            from app.database import dapatkan_koneksi_db, IS_POSTGRES
+            try:
+                conn = dapatkan_koneksi_db()
+                cursor = conn.cursor()
+                if IS_POSTGRES:
+                    query = "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = %s AND rentang_waktu = %s ORDER BY waktu_dibuat DESC LIMIT 1"
+                else:
+                    query = "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = ? AND rentang_waktu = ?"
+                cursor.execute(query, (str(kata_kunci), str(rentang_waktu)))
+                row = cursor.fetchone()
+                cursor.close()
+                conn.close()
+                if row: return row[0]
+            except Exception:
+                return None
+            return None
+
+        def simpan_summary_ke_db(kata_kunci, rentang_waktu, hasil_summary):
+            from app.database import dapatkan_koneksi_db, IS_POSTGRES
+            try:
+                conn = dapatkan_koneksi_db()
+                cursor = conn.cursor()
+                if IS_POSTGRES:
+                    query = "INSERT INTO executive_summary (kata_kunci, rentang_waktu, hasil_summary) VALUES (%s, %s, %s)"
+                else:
+                    query = "INSERT INTO executive_summary (kata_kunci, rentang_waktu, hasil_summary) VALUES (?, ?, ?)"
+                cursor.execute(query, (str(kata_kunci), str(rentang_waktu), hasil_summary))
+                conn.commit()
+                cursor.close()
+                conn.close()
+            except Exception:
+                pass
+        # --------------------------------------------------------------------
+
+        # Menggunakan try-except pembungkus len(filtered_df) agar aman jika filtered_df tidak terdefinisi
+        try:
+            df_length = len(filtered_df)
+        except NameError:
+            df_length = 0
+
+        if df_length > 0:
             col1, col2, col3 = st.columns(3)
             with col1:
                 sentimen_count = filtered_df["Sentimen"].value_counts()
@@ -359,106 +483,138 @@ def render_app():
                 st.write(f"• {insight}")
             
             # --------------------------------------------------
-            # ATTACHED: EXECUTIVE SUMMARY SYSTEM (g4f Client)
+            # ATTACHED: EXECUTIVE SUMMARY SYSTEM (Official Gemini Client)
             # --------------------------------------------------
             st.divider()
 
-            with st.expander("📝 Ringkasan Eksekutif Konten (Official Gemini Client)", expanded=False):
-                st.markdown("Klik tombol di bawah untuk meminta AI Executive Summary berita")
-                
-                # SINKRONISASI DINAMIS: Mengambil keyword pertama dari pilihan multiselect filter.
-                # Jika filter kosong, akan otomatis default kembali menggunakan kata kunci "Inflasi Papua".
-                if selected_keyword:
-                    default_keyword = selected_keyword[0]
+            with st.expander("📝 Ringkasan Eksekutif Konten (Official Gemini Client)", expanded=True):
+                if active_keywords and len(active_keywords) > 0:
+                    default_keyword = active_keywords[0]
                 else:
                     default_keyword = "Inflasi Papua"
                     
-                # Input kata kunci otomatis terisi menyesuaikan dengan sinkronisasi filter yang aktif
                 target_keyword = st.text_input("Konfirmasi Kata Kunci Analisis:", value=default_keyword)
                 
-                if st.button("✨ Hasilkan Narasi Ringkasan Otomatis", key="generate_gemini_summary"):
-                    with st.spinner("🔄 Sedang memproses data dan menghubungi Gemini AI..."):
+                # Filter data berdasarkan keyword target terlebih dahulu
+                filtered_data = filtered_df[filtered_df['kata_kunci'].astype(str).str.contains(target_keyword, case=False, na=False)]
+                
+                if filtered_data.empty:
+                    st.warning(f"Data tidak ditemukan untuk kata kunci: '{target_keyword}'")
+                else:
+                    date_min = filtered_data['waktu_tampilan'].dropna().min()
+                    date_max = filtered_data['waktu_tampilan'].dropna().max()
+                    date_range_str = f"{date_min} sampai {date_max}"
+                    
+                    # 🟢 KUNCI REVISI: Ubah fungsi cek_cache agar HANYA mencari berdasarkan kata_kunci
+                    def cek_cache_summary_hanya_keyword(kata_kunci):
+                        from app.database import dapatkan_koneksi_db, IS_POSTGRES
                         try:
-                            from google import genai
-                            
-                            # Inisialisasi Google Genai Client (Otomatis membaca st.secrets["GEMINI_API_KEY"])
-                            client = genai.Client()
-                            
-                            filtered_data = filtered_df[filtered_df['kata_kunci'].astype(str).str.contains(target_keyword, case=False, na=False)]
-                            
-                            if filtered_data.empty:
-                                st.warning(f"Data tidak ditemukan untuk kata kunci: '{target_keyword}'")
+                            conn = dapatkan_koneksi_db()
+                            cursor = conn.cursor()
+                            if IS_POSTGRES:
+                                # Dihapus bagian: AND rentang_waktu = %s
+                                query = "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = %s ORDER BY waktu_dibuat DESC LIMIT 1"
                             else:
-                                date_min = filtered_data['waktu_tampilan'].dropna().min()
-                                date_max = filtered_data['waktu_tampilan'].dropna().max()
-                                date_range_str = f"{date_min} sampai {date_max}"
-                                
-                                t_media = filtered_data['media'].value_counts().head(3)
-                                t_media_str = ", ".join([f"{m} ({c} artikel)" for m, c in t_media.items()])
-                                
-                                clean_df = filtered_data.dropna(subset=['isi_konten', 'judul', 'media'])
-                                clean_df = clean_df.sample(frac=0.10, random_state=42) # sampel 10 persen
-                                
-                                formatted_articles = [
-                                    f"--- ARTIKEL: {row['judul']} ({row['media']}) ---\n{row['isi_konten']}"
-                                    for _, row in clean_df.iterrows()
-                                ]
-                                concatenated_content = "\n\n".join(formatted_articles)
-                                
-                                # Batasi panjang korpus berita agar aman dari batasan token maksimum konteks
-                                if len(concatenated_content) > 100000:
-                                    concatenated_content = concatenated_content[:100000] + "\n\n... [Sisa konten dipotong karena batas kapasitas token] ..."
-                                
-                                prompt_instruksi = f"""
-                                Judul Tugas: Analisis Berita Eksekutif Komprehensif (Metode Terintegrasi 5W+1H)
+                                # Dihapus bagian: AND rentang_waktu = ?
+                                query = "SELECT hasil_summary FROM executive_summary WHERE kata_kunci = ? ORDER BY waktu_dibuat DESC LIMIT 1"
+                            cursor.execute(query, (str(kata_kunci),))
+                            row = cursor.fetchone()
+                            cursor.close()
+                            conn.close()
+                            if row: return row[0]
+                        except Exception:
+                            return None
+                        return None
 
-                                Instruksi Utama:
-                                Buatlah sebuah analisis berita eksekutif yang mendalam dan komprehensif dalam bentuk ESSAI MURNI mengalir (narrative essay). Jangan menggunakan sub-judul kaku untuk masing-masing poin 5W+1H (seperti "WHAT:", "WHO:", dll), melainkan leburkan seluruh unsur tersebut secara organis, mengalir, dan profesional ke dalam paragraf-paragraf esai.
+                    # Jalankan pengecekan tanpa peduli parameter periode
+                    existing_summary = cek_cache_summary_hanya_keyword(target_keyword)
 
-                                I. PEDOMAN METADATA & KONTEKS (Wajib ditulis di paragraf pembuka secara natural):
-                                - Profil Kata Kunci yang Dianalisis: {target_keyword}
-                                - Cakupan Rentang Tanggal (waktu_tampil): {date_range_str}
-                                - 3 Kontributor Media Teratas: {t_media_str}
-
-                                II. KERANGKA ESSAI (Integrasikan seluruh poin ini ke dalam narasi esai):
-                                Berdasarkan kolom isi_konten pada file "news_data_lengkap_20260701_004851.csv", narasikan:
-                                - Peristiwa utama, pengumuman, kebijakan, atau isu krusial yang dilaporkan terkait tren inflasi.
-                                - Individu, organisasi, institusi (seperti BI, Pemda, Bulog, BPS) yang terlibat aktif atau terdampak dalam pemberitaan.
-                                - Linimasa atau waktu terjadinya peristiwa-peristiwa penting tersebut berdasarkan data artikel.
-                                - Cakupan geografis daerah yang memberikan dampak atau terdampak terbesar di wilayah Papua (seperti Jayapura, Nabire, Keerom, dll).
-                                - Akar penyebab atau faktor pendorong mengapa situasi inflasi tersebut terjadi (seperti kendala logistik, wabah penyakit ternak, regulasi subsidi).
-                                - Bagaimana situasi tersebut berkembang saat ini serta bagaimana respons taktis, operasi pasar, atau strategi jangka panjang yang dilakukan oleh pihak berwenang.
-
-                                III. KETENTUAN FORMAT & GAYA BAHASA:
-                                - Gunakan bahasa Indonesia formal, objektif, dan analitis.
-                                - Gunakan teknik tebal (bolding) pada frasa kunci atau angka penting untuk menjaga scannability (keterbacaan cepat) agar laporan mudah dipahami oleh tingkat eksekutif.
-                                - Hindari penggunaan poin-poin (bullet points) di bagian inti analisis; pertahankan struktur narasi esai yang padat dan berisi.
-
-                                KORPUS BERITA:
-                                {concatenated_content}
-                                """
-                                
-                                # Memanggil streaming API dari model unggulan Gemini 2.5 Flash
-                                response_stream = client.models.generate_content_stream(
-                                    model="gemini-2.5-flash",
-                                    contents=prompt_instruksi
-                                )
-                                
-                                # Generator untuk dikonsumsi langsung oleh st.write_stream
-                                def generate_stream():
-                                    for chunk in response_stream:
-                                        if chunk.text:
-                                            yield chunk.text
-                                
-                                st.success(f"### 📊 Hasil Analisis Eksekutif: {target_keyword}")
-                                st.write_stream(generate_stream())
-                                
-                        except Exception as e:
-                            st.error(f"Terjadi kesalahan saat menghubungi API Gemini: {e}")
-                                
+                    if existing_summary:
+                        # 🟢 JIKA ADA: Langsung tampilkan hasil summary yang tersimpan sebelumnya
+                        st.success(f"### 📊 Hasil Analisis Eksekutif (Dari Database Cache): {target_keyword}")
+                        st.markdown(existing_summary)
+                    else:
+                        # 🔴 JIKA TIDAK ADA: Tampilkan info & tombol generate yang lama
+                        st.info("💡 Belum ada narasi ringkasan otomatis untuk filter ini di database.")
                         
+                        if st.button("✨ Hasilkan Narasi Ringkasan Otomatis", key="generate_gemini_summary"):
+                            with st.spinner("🔄 Sedang memproses data dan menghubungi Gemini AI..."):
+                                try:
+                                    from google import genai
+                                    client = genai.Client()
+                                    
+                                    t_media = filtered_data['media'].value_counts().head(3)
+                                    t_media_str = ", ".join([f"{m} ({c} artikel)" for m, c in t_media.items()])
+                                    
+                                    clean_df = filtered_data.dropna(subset=['isi_konten', 'judul', 'media'])
+                                    clean_df = clean_df.sample(frac=0.10, random_state=42)
+                                    
+                                    formatted_articles = [
+                                        f"--- ARTIKEL: {row['judul']} ({row['media']}) ---\n{row['isi_konten']}"
+                                        for _, row in clean_df.iterrows()
+                                    ]
+                                    concatenated_content = "\n\n".join(formatted_articles)
+                                    
+                                    if len(concatenated_content) > 100000:
+                                        concatenated_content = concatenated_content[:100000] + "\n\n... [Sisa konten dipotong] ..."
+                                    
+                                    # PROMPT ASLI ANDA (Tidak Diubah)
+                                    prompt_instruksi = f"""
+                                    Judul Tugas: Analisis Berita Eksekutif Komprehensif (Metode Terintegrasi 5W+1H)
+
+                                    Instruksi Utama:
+                                    Buatlah sebuah analisis berita eksekutif yang mendalam dan komprehensif dalam bentuk ESSAI MURNI mengalir (narrative essay). Jangan menggunakan sub-judul kaku untuk masing-masing poin 5W+1H (seperti "WHAT:", "WHO:", dll), melainkan leburkan seluruh unsur tersebut secara organis, mengalir, dan profesional ke dalam paragraf-paragraf esai.
+
+                                    I. PEDOMAN METADATA & KONTEKS (Wajib ditulis di paragraf pembuka secara natural):
+                                    - Profil Kata Kunci yang Dianalisis: {target_keyword}
+                                    - Cakupan Rentang Tanggal (waktu_tampil): {date_range_str}
+                                    - 3 Kontributor Media Teratas: {t_media_str}
+
+                                    II. KERANGKA ESSAI (Integrasikan seluruh poin ini ke dalam narasi esai):
+                                    Berdasarkan kolom isi_konten pada file "news_data_lengkap_20260701_004851.csv", narasikan:
+                                    - Peristiwa utama, pengumuman, kebijakan, atau isu krusial yang dilaporkan terkait tren inflasi.
+                                    - Individu, organisasi, institusi (seperti BI, Pemda, Bulog, BPS) yang terlibat aktif atau terdampak dalam pemberitaan.
+                                    - Linimasa atau waktu terjadinya peristiwa-peristiwa penting tersebut berdasarkan data artikel.
+                                    - Cakupan geografis daerah yang memberikan dampak atau terdampak terbesar di wilayah Papua (seperti Jayapura, Nabire, Keerom, dll).
+                                    - Akar penyebab atau faktor pendorong mengapa situasi inflasi tersebut terjadi (seperti kendala logistik, wabah penyakit ternak, regulasi subsidi).
+                                    - Bagaimana situasi tersebut berkembang saat ini serta bagaimana respons taktis, operasi pasar, atau strategi jangka panjang yang dilakukan oleh pihak berwenang.
+
+                                    III. KETENTUAN FORMAT & GAYA BAHASA:
+                                    - Gunakan bahasa Indonesia formal, objektif, dan analitis.
+                                    - Gunakan teknik tebal (bolding) pada frasa kunci atau angka penting untuk menjaga scannability (keterbacaan cepat) agar laporan mudah dipahami oleh tingkat eksekutif.
+                                    - Hindari penggunaan poin-poin (bullet points) di bagian inti analisis; pertahaman struktur narasi esai yang padat dan berisi.
+
+                                    KORPUS BERITA:
+                                    {concatenated_content}
+                                    """
+                                    
+                                    response_stream = client.models.generate_content_stream(
+                                        model="gemini-2.5-flash",
+                                        contents=prompt_instruksi
+                                    )
+                                    
+                                    full_response_text = []
+                                    
+                                    def generate_stream():
+                                        for chunk in response_stream:
+                                            if chunk.text:
+                                                full_response_text.append(chunk.text)
+                                                yield chunk.text
+                                    
+                                    st.success(f"### 📊 Hasil Analisis Eksekutif: {target_keyword}")
+                                    st.write_stream(generate_stream())
+                                    
+                                    final_text = "".join(full_response_text)
+                                    if final_text:
+                                        # Saat menyimpan, isi parameter periode tetap diisi (misal dengan periode saat ini) agar struktur tabel DB tidak error,
+                                        # namun saat proses cek di atas, kolom tersebut akan diabaikan secara total.
+                                        simpan_summary_ke_db(target_keyword, periode_str, final_text)
+                                        st.rerun()
+                                        
+                                except Exception as e:
+                                    st.error(f"Terjadi kesalahan saat menghubungi API Gemini: {e}")
         else:
-            st.info("Tidak ada data untuk ditampilkan.")
+            st.info("❌ Tidak ada data untuk ditampilkan.")
 
     with tab2:
         st.subheader("📈 Visualisasi Data")

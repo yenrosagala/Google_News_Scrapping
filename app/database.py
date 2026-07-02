@@ -294,13 +294,10 @@ def dapatkan_koneksi_db():
 # ======================================================
 
 def inisialisasi_database():
-
     conn = dapatkan_koneksi_db()
-
     cursor = conn.cursor()
 
     if IS_POSTGRES:
-
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS artikel(
@@ -316,9 +313,20 @@ def inisialisasi_database():
             )
             """
         )
+        # 🟢 TAMBAHKAN INI UNTUK POSTGRES
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS executive_summary (
+                id SERIAL PRIMARY KEY,
+                kata_kunci TEXT,
+                rentang_waktu TEXT,
+                hasil_summary TEXT,
+                waktu_dibuat TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
 
     else:
-
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS artikel(
@@ -331,6 +339,18 @@ def inisialisasi_database():
                 link TEXT UNIQUE,
                 isi_konten TEXT,
                 di_scrap_pada TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        # 🟢 TAMBAHKAN INI UNTUK SQLITE
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS executive_summary (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kata_kunci TEXT,
+                rentang_waktu TEXT,
+                hasil_summary TEXT,
+                waktu_dibuat TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """
         )
