@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import time
 
+
 import feedparser
 import pandas as pd
 import requests
@@ -271,27 +272,31 @@ def proses_tunggal_item(entry, keyword_bersih):
     }
 
 
+
+
 def ambil_feed_google_news(keyword):
     """
-    Mengirimkan keyword ke Google News dengan membungkusnya murni menggunakan
-    tanda petik ganda ("") agar menghasilkan pencarian yang EXACT MATCH.
+    Mengirimkan keyword ke Google News dengan filter waktu 1 tahun terakhir.
     """
-    # Bersihkan spasi berlebih di awal, akhir, dan tengah kata kunci
+    # Bersihkan spasi berlebih
     kw_clean = " ".join(keyword.strip().split())
     
-    # Bungkus keyword utuh dalam tanda petik ganda, misal: "bps papua"
-    query_target = f'{kw_clean}'
+    # Bungkus dalam tanda petik untuk exact match, 
+    # lalu tambahkan +when:1y untuk filter 1 tahun terakhir
+    query_target = f'"{kw_clean}" when:1y'
     
-    logging.info(f"📡 Query Exact Match dikirim ke Google News: {query_target}")
+    logging.info(f"📡 Query dikirim ke Google News: {query_target}")
     
-    # Encode query agar aman dikirim melalui URL RSS Google News
+    # Encode query agar aman dikirim melalui URL
     query_encoded = urllib.parse.quote(query_target)
+    
+    # URL dengan parameter waktu
     url = f"https://news.google.com/rss/search?q={query_encoded}&hl=id&gl=ID&ceid=ID:id"
     
     response = HTTP_SESSION.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
     response.raise_for_status()
+    
     return feedparser.parse(response.content)
-
 
 def run_scraper_pipeline(keyword, on_progress=None, on_status=None):
     """Pipeline scraper utama yang mendukung multi-keyword (koma)."""
