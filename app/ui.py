@@ -675,7 +675,7 @@ def render_app():
                         except Exception as main_e:
                             st.error(f"Terjadi kesalahan internal sistem: {main_e}")
         else:
-            st.info("❌ Tidak ada data untuk ditampilkan.")
+            st.info("Tidak ada data untuk ditampilkan.")
 
     with tab2:
         st.subheader("📈 Visualisasi Data")
