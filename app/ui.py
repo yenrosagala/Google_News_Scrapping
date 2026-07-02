@@ -561,7 +561,7 @@ def render_app():
                         if st.button("✨ Hasilkan Narasi Ringkasan Otomatis", key="generate_gemini_summary"):
                             trigger_generate = True
 
-                    # Proses pembuatan narasi ke Gemini Client
+                    
                     if trigger_generate:
                         # Ubah status judul komponen menjadi mode memproses
                         area_judul.info("⏳ Sedang menulis dan memperbarui ringkasan eksekutif baru...")
