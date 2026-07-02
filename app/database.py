@@ -147,7 +147,7 @@ def cek_autentikasi_manual():
                 <h1 class="premium-title">Media Intelligence Engine</h1>
                 <h4 class="premium-title">News Scraper, Analisis Sentimen Berita, Executive Summary AI</h4>
                 <p class="premium-subtitle">Aplikasi scraping Google News berdasarkan keyword, Cara merangkum berita otomatis untuk eksekutif.</p>
-                <p class="premium-subtitle">Silakan pilih metode autentikasi di bawah untuk melanjutkan</p>
+                <p class="premium-subtitle"> Silahkan pilih metode autentikasi di bawah untuk melanjutkan</p>
                     
             </div>
         """, unsafe_allow_html=True)
