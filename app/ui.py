@@ -1,4 +1,4 @@
-import streamlit as st
+2import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -719,7 +719,7 @@ def render_app():
                             
                             if len(clean_df) > 10:
                                 clean_df = clean_df.groupby('Sentimen', group_keys=False).apply(
-                                    lambda x: x.sample(frac=0.25, random_state=42) if len(x) > 0 else x
+                                    lambda x: x.sample(frac=0.75, random_state=42) if len(x) > 0 else x
                                 )
                             else:
                                 clean_df = clean_df
