@@ -179,199 +179,164 @@ def render_app():
     cek_autentikasi_manual()
     inisialisasi_database()
 
-    # =========================================================================
-    # 🎨 INTEGRASI TOTAL CSS PREMIERE - DASHBOARD, LOGIN & SIDEBAR
-    # =========================================================================
     st.markdown("""
-    <style>
-           
-            /* 1. Backdrop Background Image */
-            html, body, .stApp, [data-testid="stAppViewContainer"] {
-                background-image: url("https://cdn.jsdelivr.net/gh/yenrosagala/Google_News_Scrapping@main/5630939.jpg") !important;
-                background-size: cover !important;
-                background-attachment: fixed !important;
-            }
+<style>
+    /* =========================================================================
+       1. GLOBAL RESET & BACKGROUND
+       ========================================================================= */
+    html, body, .stApp {
+        background-color: #0F172A !important;
+        background-image: 
+            radial-gradient(at 0% 0%, rgba(224, 242, 254, 0.15) 0px, transparent 50%),
+            url("https://cdn.jsdelivr.net/gh/yenrosagala/Google_News_Scrapping@main/5630939.jpg") !important;
+        background-size: cover !important;
+        background-attachment: fixed !important;
+    }
+    header, footer { visibility: hidden !important; }
 
-            /* 2. Style untuk Kartu Login Utama (Premium Card) */
-            .premium-card {
-                background: rgba(15, 23, 42, 0.75) !important; /* Biru gelap transparan */
-                backdrop-filter: blur(20px) !important;
-                -webkit-backdrop-filter: blur(20px) !important;
-                border: 1px solid rgba(255, 255, 255, 0.1) !important;
-                border-radius: 20px !important;
-                box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4) !important;
-                padding: 3rem !important;
-            }
+    /* =========================================================================
+       2. UI COMPONENTS (EXPANDER, DIALOG, CARDS)
+       ========================================================================= */
+    /* Expander Container */
+    details.st-emotion-cache-2sxnh6, summary.st-emotion-cache-ecoug0 {
+        background: rgba(15, 23, 42, 0.8) !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border-radius: 12px !important;
+        color: #FFFFFF !important;
+    }
+    summary p { color: #F8FAFC !important; font-weight: 700 !important; }
+    
+    [data-testid="stExpanderDetails"] {
+        background-color: rgba(17, 24, 39, 0.95) !important; 
+        border: 2px solid #38BDF8 !important; 
+        padding: 20px !important;
+        border-radius: 0 0 12px 12px !important;
+    }
+    [data-testid="stExpanderDetails"] p, [data-testid="stExpanderDetails"] div { color: #F1F5F9 !important; }
 
-            /* 3. Style untuk Tab Panel (Login Tabs) */
-            div[data-baseweb="tab-panel"] {
-                background: rgba(30, 41, 59, 0.7) !important;
-                backdrop-filter: blur(15px) !important;
-                border: 1px solid rgba(255, 255, 255, 0.1) !important;
-                border-radius: 16px !important;
-                padding: 20px !important;
-            }
+    /* Dialog/Popup */
+    div[role="dialog"] { background-color: rgba(15, 23, 42, 0.98) !important; }
+    div[role="dialog"] * { color: #FFFFFF !important; }
 
-            /* 4. Text Styling (Wajib Putih agar terlihat di background gelap) */
-            .premium-title, .premium-subtitle, .stMarkdown p, .stMarkdown strong, label span {
-                color: #FFFFFF !important;
-            }
+    /* Cards & Containers */
+    .premium-card, .main-title, .kpi-box {
+        background: rgba(15, 23, 42, 0.85) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 20px !important;
+        padding: 20px !important;
+    }
 
-            /* 5. Styling untuk Box Info (Mode Peninjau & Admin) */
-            div[style*="background-color: rgb(248, 250, 252)"], 
-            div[style*="background-color: rgb(239, 246, 255)"] {
-                background: rgba(255, 255, 255, 0.08) !important;
-                color: #E2E8F0 !important;
-                border-left: 4px solid #38BDF8 !important;
-                border-radius: 0 8px 8px 0 !important;
-            }
+    /* =========================================================================
+       3. FORMS, INPUTS & SELECTORS
+       ========================================================================= */
+    label[data-testid="stWidgetLabel"] span { color: #38BDF8 !important; font-weight: 700 !important; }
+    
+    input[type="text"], div[data-baseweb="select"] {
+        background-color: rgba(0, 0, 0, 0.3) !important;
+        color: #FFFFFF !important;
+        border: 1.5px solid #38BDF8 !important;
+        border-radius: 8px !important;
+    }
 
-            /* 6. Input Kredensial Password */
-            input {
-                background: rgba(255, 255, 255, 0.05) !important;
-                color: #FFFFFF !important;
-                border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            }
+    /* Selected Items (Multiselect Tags) */
+    div[data-baseweb="tag"] {
+        background-color: #38BDF8 !important;
+        color: #0F172A !important;
+        font-weight: 600 !important;
+        border-radius: 6px !important;
+    }
 
-            /* 7. Footer */
-            p[style*="text-align: center"] {
-                color: #94A3B8 !important;
-            }
+    /* =========================================================================
+       4. KPI COMPONENTS
+       ========================================================================= */
+    .kpi-box {
+        backdrop-filter: blur(15px) !important;
+        text-align: center !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+    }
+    .kpi-box:hover { transform: translateY(-5px); border-color: rgba(56, 189, 248, 0.8) !important; }
+    .kpi-label { font-size: 0.75rem !important; color: #94A3B8 !important; font-weight: 800; text-transform: uppercase; margin-bottom: 8px; }
+    .kpi-value { font-size: 2.2rem !important; font-weight: 800; color: #FFFFFF !important; text-shadow: 0 0 10px rgba(56, 189, 248, 0.4); }
 
-
+    /* =========================================================================
+       5. UTILITY & TYPOGRAPHY
+       ========================================================================= */
+    pre, code {
+        background-color: rgba(30, 41, 59, 0.9) !important;
+        color: #F87171 !important;
+        border: 1px solid #475569 !important;
+        padding: 8px !important;
+        border-radius: 6px !important;
+    }
+    [data-testid="stAlert"] {
+        background-color: rgba(55, 65, 81, 0.6) !important;
+        border-left: 5px solid #F59E0B !important;
+        color: ##A9A9A9 !important;
+    }
+    [data-testid="stSidebar"] { background-color: rgba(15, 23, 42, 0.95) !important; }
                 
-                /* Perbaikan: Memastikan .main-title memiliki style sendiri yang tidak tertimpa */
-        .main-title { 
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.96) 0%, rgba(30, 41, 59, 0.92) 100%) !important; 
-            padding: 38px 35px !important; 
-            border-radius: 16px !important; 
-            color: #FFFFFF !important; 
-            margin-bottom: 2rem !important; 
-            border: 1px solid #334155 !important;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12) !important;
-            /* Menambah properti display untuk memastikan box dirender dengan benar */
-            display: block !important; 
-            width: 100% !important;
-        }
+    
+    /* Menargetkan tombol (button) yang spesifik */
+    /* Kita gunakan selektor berbasis class dan data-testid agar tetap stabil */
+    button[data-testid="stBaseButton-secondary"], 
+    button[data-testid="stBaseButton-primary"] {
+        background: linear-gradient(135deg, #38BDF8 0%, #0284C7 100%) !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 10px !important;
+        padding: 10px 20px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 1px !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3) !important;
+    }
 
-        /* Memastikan teks di dalamnya tidak ikut transparan */
-        .main-title h1, .main-title p {
-            color: #FFFFFF !important;
-            opacity: 1 !important;
-        }
-        /* 1. BACKDROP GLOBAL */
-        header { visibility: hidden; }
-        footer { visibility: hidden; }
+    /* Efek saat kursor diarahkan (Hover) */
+    button[data-testid="stBaseButton-secondary"]:hover, 
+    button[data-testid="stBaseButton-primary"]:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5) !important;
+        background: linear-gradient(135deg, #7DD3FC 0%, #0369A1 100%) !important;
+    }
 
-        html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stApp"], [data-testid="stMainBlockContainer"] {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: #0F172A !important;
-            background-image: 
-                radial-gradient(at 0% 0%, rgba(224, 242, 254, 0.45) 0px, transparent 50%),
-                radial-gradient(at 100% 0%, rgba(243, 232, 255, 0.45) 0px, transparent 50%),
-                linear-gradient(rgba(248, 250, 252, 0.4), rgba(248, 250, 252, 0.4)),
-                url("https://cdn.jsdelivr.net/gh/yenrosagala/Google_News_Scrapping@main/5630939.jpg") !important;
-            background-size: cover !important;
-            background-attachment: fixed !important;
-        }
+    /* Efek saat tombol diklik (Active) */
+    button[data-testid="stBaseButton-secondary"]:active {
+        transform: translateY(0px) !important;
+    }
 
-        /* 2. SIDEBAR KONTROL PANEL (REVISI: Kotak Transparan Menu Scraping) */
-        [data-testid="stSidebar"] { 
-            background-color: rgba(15, 23, 42, 0.8) !important; 
-            backdrop-filter: blur(20px) !important;
-        }
+    /* 1. Kontras untuk teks yang terpilih (Selected Value) di dalam Dropdown/Selectbox */
+    div[data-baseweb="select"] span {
+        color: #FFFFFF !important; /* Warna putih agar sangat terbaca */
+        font-weight: 700 !important;
+    }
 
-        /* Kotak Putih Transparan pada Menu Utama Scraping di Sidebar */
-        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-            background-color: rgba(255, 255, 255, 0.85) !important;
-            padding: 20px !important;
-            border-radius: 16px !important;
-            border: 1px solid rgba(255, 255, 255, 0.3) !important;
-            margin: 10px !important;
-        }
+    /* 2. Warna background kotak untuk elemen yang terpilih agar menonjol */
+    div[data-baseweb="select"] div[data-baseweb="tag"] {
+        background-color: #38BDF8 !important; /* Biru cerah untuk background tag */
+        color: #0F172A !important;           /* Teks gelap agar kontras di atas biru */
+        font-weight: 600 !important;
+        border-radius: 6px !important;
+    }
 
-        /* Teks dalam kotak Sidebar agar gelap & kontras */
-        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] h3,
-        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] p,
-        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] label {
-            color: #0F172A !important;
-            font-weight: 600 !important;
-        }
+    /* 3. Menghilangkan warna putih bawaan pada input teks yang berisi nilai */
+    input {
+        color: #FFFFFF !important;
+        background-color: rgba(0, 0, 0, 0.2) !important;
+    }
 
-        /* 3. DASHBOARD MAIN CONTAINER */
-        [data-testid="stMainSpaceBlockContainer"] {
-            background: rgba(129, 192, 192, 0.94) !important;
-            backdrop-filter: blur(20px) !important;
-            border-radius: 20px;
-            padding: 2.5rem !important;
-        }
+    /* 4. Jika menggunakan multiselect, pastikan tag tidak tenggelam */
+    div[data-testid="stMultiSelect"] span {
+        color: #0F172A !important;
+    }
 
-        .kpi-label { 
-                font-size: 0.8rem;                /* Ukuran teks kecil */
-                color: #94A3B8 !important;         /* Warna abu-abu Slate-400 */
-                margin-bottom: 10px;              /* Jarak bawah ke angka */
-                font-weight: 700;                 /* Ketebalan huruf */
-                text-transform: uppercase;        /* Membuat huruf jadi kapital semua */
-                letter-spacing: 0.05em;           /* Spasi antar huruf agar terlihat elegan */
-            }
-        /* 4. HALAMAN LOGIN (PREMIUM CARD) */
-        .premium-card {
-            background: rgba(15, 23, 42, 0.85) !important;
-            backdrop-filter: blur(20px) !important;
-            padding: 3rem 2.5rem !important;
-            border-radius: 20px !important;
-            border: 1px solid rgba(255, 255, 255, 0.08) !important;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
-        }
-        
-        .premium-title, .premium-subtitle { color: #FFFFFF !important; }
-        .premium-card input { background-color: rgba(255, 255, 255, 0.1) !important; color: white !important; }
+</style>
+""", unsafe_allow_html=True)
 
-        /* 5. TABS & KPI */
-        div[data-baseweb="tab-panel"] {
-            background-color: rgba(192, 192, 192, 0.80) !important;
-            border-radius: 16px !important;
-            padding: 30px !important;
-        }
-        
-        .kpi-box { 
-            background: rgba(15, 23, 42, 0.88) !important;
-            padding: 26px 20px; 
-            border-radius: 16px; 
-            text-align: center;
-        }
-        .kpi-value { color: #38BDF8 !important; font-weight: 800; font-size: 2.5rem; }
-                
-        /* Revisi Ukuran Huruf Tab */
-        .stTabs [data-baseweb="tab"] p {
-            font-size: 16px !important;    /* Sesuaikan ukuran (default biasanya 14px) */
-            font-weight: 600 !important;    /* Menambah ketebalan agar lebih terbaca */
-            margin: 0 !important;
-        }
 
-        /* Opsional: Menyesuaikan tinggi tab agar proporsional dengan font yang lebih besar */
-        .stTabs [data-baseweb="tab"] {
-            height: 50px !important;       /* Sedikit ditinggikan agar pas dengan teks besar */
-        }
-                
-                /* Styling untuk Box Judul Sidebar */
-        .sidebar-box {
-            background: rgba(15, 23, 42, 0.1) !important; /* Efek kaca tipis */
-            backdrop-filter: blur(10px) !important;
-            border: 1px solid rgba(255, 255, 255, 0.2) !important;
-            border-radius: 12px !important;
-            padding: 15px !important;
-            margin-bottom: 20px !important;
-            text-align: center;
-        }
 
-        .sidebar-box h3 {
-            margin: 0 !important;
-            color: #FFFFFF !important; /* Teks putih agar kontras */
-            font-size: 1.2rem !important;
-        }
-    </style>
-    """, unsafe_allow_html=True)
+
     
     # Header HTML Kustom yang Meniru File .txt yang Anda Upload
     st.markdown("""
@@ -469,21 +434,25 @@ def render_app():
 
         st.markdown("---")
         if user_type == "login":
-            with st.popover("🗑 Hapus Seluruh Database", width='stretch'):
-                st.warning("⚠️ Tindakan ini akan menghapus semua artikel dari database!")
-                password_konfirmasi = st.text_input("Masukkan password akun Anda", type="password", key="del_pwd")
-                if st.button("Konfirmasi Hapus Data", type="primary", width='stretch'):
-                    password_login = st.session_state.get("saved_db_password", "")
-                    if password_konfirmasi == password_login: 
-                        jumlah = hapus_semua_data_db()
-                        if "active_keyword" in st.session_state:
-                            del st.session_state.active_keyword
-                        st.success(f"✅ {jumlah} berita berhasil dihapus.")
-                        st.rerun()
-                    else:
-                        st.error("❌ Password salah. Harus sama dengan password login Anda.")
-        else:
-            st.button("🗑 Hapus Seluruh Database", width='stretch', disabled=True)
+            # Tombol hanya muncul jika pengguna adalah admin
+            if st.session_state.get('role') == 'admin':
+                with st.popover("🗑 Hapus Seluruh Database", use_container_width=True):
+                    st.warning("⚠️ Tindakan ini akan menghapus semua artikel dari database!")
+                    password_konfirmasi = st.text_input("Masukkan password akun Anda", type="password", key="del_pwd")
+                    
+                    if st.button("Konfirmasi Hapus Data", type="primary", use_container_width=True):
+                        password_login = st.session_state.get("saved_db_password", "")
+                        if password_konfirmasi == password_login: 
+                            jumlah = hapus_semua_data_db()
+                            if "active_keyword" in st.session_state:
+                                del st.session_state.active_keyword
+                            st.success(f"✅ {jumlah} berita berhasil dihapus.")
+                            st.rerun()
+                        else:
+                            st.error("❌ Password salah.")
+            else:
+                # Jika bukan admin, tombol tidak dirender sama sekali
+                pass
 
         st.markdown("---")
         if st.button("🚪 Logout", width='stretch', type="secondary"):
@@ -599,7 +568,6 @@ def render_app():
                 target_keywords_list = [kw.strip().title() for kw in input_keyword.split(",") if kw.strip()]
                 
                 if target_keywords_list:
-                    st.caption(f"🔍 **Kata kunci aktif digabungkan (Logika OR):** " + " • ".join([f"`{k}`" for k in target_keywords_list]))
                     regex_pattern = "|".join([re.escape(kw) for kw in target_keywords_list])
                     filtered_data = filtered_df[filtered_df['kata_kunci'].astype(str).str.contains(regex_pattern, case=False, na=False)]
                 else:
