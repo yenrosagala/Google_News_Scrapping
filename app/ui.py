@@ -553,7 +553,7 @@ def render_app():
                     trigger_generate = False
                     if st.session_state[state_key] and st.session_state[state_status_key] == "Versi Cache":
                         st.info("💡 Data di atas dapat diperbarui dengan menggabungkan artikel historis dan artikel baru hasil scraping.")
-                        if st.button("🔄 Perbarui & Generate Ulang (Gabungkan Data Lama + Baru)", key="regenerate_gemini_summary"):
+                        if st.button("🔄 Generate Ulang ", key="regenerate_gemini_summary"):
                             trigger_generate = True
                     elif not st.session_state[state_key]:
                         if st.button("✨ Hasilkan Narasi Ringkasan Otomatis", key="generate_gemini_summary"):
