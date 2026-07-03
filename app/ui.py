@@ -436,11 +436,11 @@ def render_app():
         if user_type == "login":
             # Tombol hanya muncul jika pengguna adalah admin
             if st.session_state.get('role') == 'admin':
-                with st.popover("🗑 Hapus Seluruh Database", use_container_width=True):
+                with st.popover("🗑 Hapus Seluruh Database", width='stretch'):
                     st.warning("⚠️ Tindakan ini akan menghapus semua artikel dari database!")
                     password_konfirmasi = st.text_input("Masukkan password akun Anda", type="password", key="del_pwd")
                     
-                    if st.button("Konfirmasi Hapus Data", type="primary", use_container_width=True):
+                    if st.button("Konfirmasi Hapus Data", type="primary", width='stretch'):
                         password_login = st.session_state.get("saved_db_password", "")
                         if password_konfirmasi == password_login: 
                             jumlah = hapus_semua_data_db()
@@ -858,7 +858,7 @@ def render_app():
                     hole=0.5
                 )
                 fig_sentimen = set_transparent_layout(fig_sentimen, "Distribusi Sentimen")
-                st.plotly_chart(fig_sentimen, use_container_width=True)
+                st.plotly_chart(fig_sentimen, width='stretch')
 
             with col2:
                 top_10_m = filtered_df["media"].value_counts().head(10).reset_index()
@@ -877,7 +877,7 @@ def render_app():
                 fig_media.update_yaxes(showgrid=False) # Hilangkan grid agar bersih
                 fig_media.update_xaxes(showgrid=False)
                 
-                st.plotly_chart(fig_media, use_container_width=True)
+                st.plotly_chart(fig_media, width='stretch')
         else:
             st.info("Tidak ada data untuk grafik.")
 

@@ -142,7 +142,7 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
     pdf.set_font("Helvetica", "", 10.5)
     pdf.set_text_color(50, 50, 50)
     pdf.ln(2)
-    for insight in insights:
+    for insight in insights[:-1]:
         clean_insight = insight.encode('ascii', 'ignore').decode('ascii').strip()
         clean_insight = clean_insight.replace("•", "-").replace("·", "-")
         pdf.multi_cell(170, 6, f"  - {clean_insight}", new_x="LMARGIN", new_y="NEXT", align="JUSTIFY")

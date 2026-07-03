@@ -283,7 +283,7 @@ def ambil_feed_google_news(keyword):
     
     # Bungkus dalam tanda petik untuk exact match, 
     # lalu tambahkan +when:1y untuk filter 1 tahun terakhir
-    query_target = f'"{kw_clean}" when:1y'
+    query_target = f'{kw_clean} when:1y'
     
     logging.info(f"📡 Query dikirim ke Google News: {query_target}")
     
