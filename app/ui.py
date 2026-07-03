@@ -272,13 +272,12 @@ def render_app():
     [data-testid="stAlert"] {
         background-color: rgba(55, 65, 81, 0.6) !important;
         border-left: 5px solid #F59E0B !important;
-        color: ##A9A9A9 !important;
+        color: #A9A9A9 !important;
     }
     [data-testid="stSidebar"] { background-color: rgba(15, 23, 42, 0.95) !important; }
                 
     
     /* Menargetkan tombol (button) yang spesifik */
-    /* Kita gunakan selektor berbasis class dan data-testid agar tetap stabil */
     button[data-testid="stBaseButton-secondary"], 
     button[data-testid="stBaseButton-primary"] {
         background: linear-gradient(135deg, #38BDF8 0%, #0284C7 100%) !important;
@@ -308,14 +307,14 @@ def render_app():
 
     /* 1. Kontras untuk teks yang terpilih (Selected Value) di dalam Dropdown/Selectbox */
     div[data-baseweb="select"] span {
-        color: #FFFFFF !important; /* Warna putih agar sangat terbaca */
+        color: #FFFFFF !important; 
         font-weight: 700 !important;
     }
 
     /* 2. Warna background kotak untuk elemen yang terpilih agar menonjol */
     div[data-baseweb="select"] div[data-baseweb="tag"] {
-        background-color: #38BDF8 !important; /* Biru cerah untuk background tag */
-        color: #0F172A !important;           /* Teks gelap agar kontras di atas biru */
+        background-color: #38BDF8 !important; 
+        color: #0F172A !important;           
         font-weight: 600 !important;
         border-radius: 6px !important;
     }
@@ -334,11 +333,6 @@ def render_app():
 </style>
 """, unsafe_allow_html=True)
 
-
-
-
-    
-    # Header HTML Kustom yang Meniru File .txt yang Anda Upload
     st.markdown("""
     <div class="main-title">
         <h1>📰 News Intelligence Dashboard</h1>
@@ -434,7 +428,6 @@ def render_app():
 
         st.markdown("---")
         if user_type == "login":
-            # Tombol hanya muncul jika pengguna adalah admin
             if st.session_state.get('role') == 'admin':
                 with st.popover("🗑 Hapus Seluruh Database", width='stretch'):
                     st.warning("⚠️ Tindakan ini akan menghapus semua artikel dari database!")
@@ -451,7 +444,6 @@ def render_app():
                         else:
                             st.error("❌ Password salah.")
             else:
-                # Jika bukan admin, tombol tidak dirender sama sekali
                 pass
 
         st.markdown("---")
@@ -486,10 +478,8 @@ def render_app():
         total_berita, berita_dengan_isi, jumlah_media, jumlah_keyword = 0, 0, 0, 0
         filtered_df = pd.DataFrame()
 
-    # KPI Cards Bergaya Premium Baru
     kpi1, kpi2, kpi3= st.columns(3)
 
-        
     with kpi1:
         st.markdown(f'<div class="kpi-box"><div class="kpi-label">📰 Total Berita</div><div class="kpi-value">{total_berita:,}</div></div>', unsafe_allow_html=True)
     with kpi2:
@@ -503,7 +493,6 @@ def render_app():
         
         active_keywords = selected_keyword if selected_keyword else []
         
-        # Tampilan Caption Dinamis Sesuai Active Keyword
         if active_keywords:
             keyword_badge = " • ".join([f"**{kw}**" for kw in active_keywords])
             st.caption(f"💡 Menampilkan analisis ringkasan eksekutif otomatis berbasis kecerdasan buatan untuk topik pencarian: {keyword_badge}")
@@ -638,7 +627,6 @@ def render_app():
                             st.markdown("### 📚 Daftar Pustaka")
                             st.markdown(parsed_references)
                         
-                        # --- EXPORT REPORT PDF AMAN ---
                         st.write("---")
                         st.markdown("#### 📥 Cetak Laporan Analisis Resmi")
                         t_media = filtered_data['media'].value_counts().head(3)
@@ -679,7 +667,12 @@ def render_app():
                         area_judul.info("⏳ Sedang menulis dan memperbarui ringkasan eksekutif baru...")
                         try:
                             from google import genai
-                            client = genai.Client()
+                            
+                            # --- MODIFIKASI ROTASI MULTI-API KEY ---
+                            list_api_keys = st.secrets.get("GEMINI_API_KEYS", [])
+                            if not list_api_keys:
+                                # Jika list_api_keys kosong di secrets, fallback menggunakan default Client (None)
+                                list_api_keys = [None]
                             
                             t_media = filtered_data['media'].value_counts().head(3)
                             t_media_str = ", ".join([f"{m} ({c} artikel)" for m, c in t_media.items()])
@@ -789,24 +782,46 @@ def render_app():
                             response_stream = None
                             model_terpilih = None
                             list_errors = []
-                            
-                            for model_name in daftar_model_fallback:
+                            api_key_terpilih_log = "Default Environment"
+
+                            # Loop untuk setiap API Key yang tersedia di Array
+                            for idx, api_key in enumerate(list_api_keys):
                                 try:
-                                    response_stream = client.models.generate_content_stream(
-                                        model=model_name,
-                                        contents=prompt_instruksi
-                                    )
-                                    model_terpilih = model_name
-                                    break  
-                                except Exception as e:
-                                    list_errors.append(f"- **{model_name}**: {str(e)}")
-                                    st.toast(f"🔄 {model_name} sibuk/gagal, mencoba cadangan berikutnya...", icon="⚠️")
+                                    # Inisialisasi client secara dinamis dengan api_key saat ini
+                                    if api_key:
+                                        client = genai.Client(api_key=api_key)
+                                        key_log = f"Key #{idx+1} ({api_key[:6]}...)"
+                                    else:
+                                        client = genai.Client()
+                                        key_log = "Default Env"
+                                    
+                                    # Coba daftar model fallback satu per satu untuk API Key ini
+                                    for model_name in daftar_model_fallback:
+                                        try:
+                                            response_stream = client.models.generate_content_stream(
+                                                model=model_name,
+                                                contents=prompt_instruksi
+                                            )
+                                            model_terpilih = model_name
+                                            api_key_terpilih_log = key_log
+                                            break  # Sukses! Keluar dari loop model
+                                        except Exception as e:
+                                            list_errors.append(f"- **{model_name}** ({key_log}): {str(e)}")
+                                            continue
+                                    
+                                    # Jika berhasil mendapatkan stream respon dari salah satu model, keluar dari loop API Key
+                                    if response_stream:
+                                        break
+                                        
+                                except Exception as client_err:
+                                    list_errors.append(f"- Init Client Error ({key_log}): {str(client_err)}")
+                                    st.toast(f"🔄 API Key #{idx+1} bermasalah, berpindah ke key cadangan...", icon="⚠️")
                                     continue
 
                             if response_stream is None:
                                 error_summary = "\n".join(list_errors)
                                 st.error(
-                                    f"🚨 **Semua model Gemini gagal merespons.** Silakan coba sesaat lagi.\n\n"
+                                    f"🚨 **Semua API Key dan Model Gemini gagal merespons (Mencapai batas limit kuota).** Silakan coba beberapa saat lagi.\n\n"
                                     f"**Detail Log Kegagalan Sistem:**\n{error_summary}"
                                 )
                             else:
@@ -820,7 +835,7 @@ def render_app():
                                 if final_text:
                                     simpan_summary_ke_db(target_keyword, periode_str, final_text)
                                     st.session_state[state_key] = final_text
-                                    st.session_state[state_status_key] = f"Hasil Diperbarui ({model_terpilih}) ✨"
+                                    st.session_state[state_status_key] = f"Hasil Diperbarui ({model_terpilih} via {api_key_terpilih_log}) ✨"
                                     st.rerun()
                                     
                         except Exception as main_e:
@@ -830,17 +845,15 @@ def render_app():
 
     with tab2:
         st.subheader("📈 Visualisasi Data")
-         # Misal fig adalah objek figur plotly Anda
         if len(filtered_df) > 0:
             col1, col2 = st.columns([1, 1], gap="large")
             
-            # Helper untuk layout transparan agar tidak perlu menulis ulang
             def set_transparent_layout(fig, title_text):
                 fig.update_layout(
                     title=title_text,
                     paper_bgcolor='rgba(0,0,0,0)',
                     plot_bgcolor='rgba(0,0,0,0)',
-                    font_color="#060911", # Menyesuaikan teks judul agar tetap terlihat di atas background transparan
+                    font_color="#060911", 
                     margin=dict(l=20, r=20, t=50, b=20)
                 )
                 return fig
@@ -870,11 +883,10 @@ def render_app():
                     y="Media", 
                     orientation="h"
                 )
-                # Tambahan: Mengatur warna bar agar konsisten dengan tema premium
                 fig_media.update_traces(marker_color='#38BDF8')
                 
                 fig_media = set_transparent_layout(fig_media, "Top 10 Media")
-                fig_media.update_yaxes(showgrid=False) # Hilangkan grid agar bersih
+                fig_media.update_yaxes(showgrid=False) 
                 fig_media.update_xaxes(showgrid=False)
                 
                 st.plotly_chart(fig_media, width='stretch')
@@ -895,3 +907,6 @@ def render_app():
             st.info("❌ Tidak ada data berita.")
 
     st.markdown("<br><hr><div class='footer'>© 2026 | News Intelligence Dashboard | Yenro Sagala - BPS Provinsi Papua</div>", unsafe_allow_html=True)
+
+if __name__ == "__main__":
+    render_app()
