@@ -149,7 +149,11 @@ def install_playwright_browsers():
 install_playwright_browsers()
 
 
-os.environ["GEMINI_API_KEY"] = st.secrets["GEMINI_API_KEY"]
+# KODE YANG AMAN
+list_keys = st.secrets.get("GEMINI_API_KEYS", [])
+if list_keys and isinstance(list_keys, list):
+    # Mengambil key pertama sebagai default string untuk library lain jika butuh
+    os.environ["GEMINI_API_KEY"] = list_keys[0]
 
 # Sekarang Client() akan mendeteksinya tanpa masalah
 client = genai.Client()
