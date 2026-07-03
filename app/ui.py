@@ -180,9 +180,7 @@ def render_app():
 
     st.markdown("""
 <style>
-    /* =========================================================================
-       1. GLOBAL RESET & BACKGROUND
-       ========================================================================= */
+    /* GLOBAL RESET & BACKGROUND */
     html, body, .stApp {
         background-color: #0F172A !important;
         background-image: 
@@ -193,10 +191,7 @@ def render_app():
     }
     header, footer { visibility: hidden !important; }
 
-    /* =========================================================================
-       2. UI COMPONENTS (EXPANDER, DIALOG, CARDS)
-       ========================================================================= */
-    /* Expander Container */
+    /* UI COMPONENTS (EXPANDER, DIALOG, CARDS) */
     details.st-emotion-cache-2sxnh6, summary.st-emotion-cache-ecoug0 {
         background: rgba(15, 23, 42, 0.8) !important;
         border: 1px solid rgba(255, 255, 255, 0.2) !important;
@@ -213,11 +208,9 @@ def render_app():
     }
     [data-testid="stExpanderDetails"] p, [data-testid="stExpanderDetails"] div { color: #F1F5F9 !important; }
 
-    /* Dialog/Popup */
     div[role="dialog"] { background-color: rgba(15, 23, 42, 0.98) !important; }
     div[role="dialog"] * { color: #FFFFFF !important; }
 
-    /* Cards & Containers */
     .premium-card, .main-title, .kpi-box {
         background: rgba(15, 23, 42, 0.85) !important;
         border: 1px solid rgba(255, 255, 255, 0.1) !important;
@@ -225,19 +218,15 @@ def render_app():
         padding: 20px !important;
     }
 
-    /* =========================================================================
-       3. FORMS, INPUTS & SELECTORS
-       ========================================================================= */
     label[data-testid="stWidgetLabel"] span { color: #38BDF8 !important; font-weight: 700 !important; }
     
-    input[type="text"], div[data-baseweb="select"] {
+    input[type="text"], input[type="password"], div[data-baseweb="select"] {
         background-color: rgba(0, 0, 0, 0.3) !important;
         color: #FFFFFF !important;
         border: 1.5px solid #38BDF8 !important;
         border-radius: 8px !important;
     }
 
-    /* Selected Items (Multiselect Tags) */
     div[data-baseweb="tag"] {
         background-color: #38BDF8 !important;
         color: #0F172A !important;
@@ -245,9 +234,6 @@ def render_app():
         border-radius: 6px !important;
     }
 
-    /* =========================================================================
-       4. KPI COMPONENTS
-       ========================================================================= */
     .kpi-box {
         backdrop-filter: blur(15px) !important;
         text-align: center !important;
@@ -258,9 +244,6 @@ def render_app():
     .kpi-label { font-size: 0.75rem !important; color: #94A3B8 !important; font-weight: 800; text-transform: uppercase; margin-bottom: 8px; }
     .kpi-value { font-size: 2.2rem !important; font-weight: 800; color: #FFFFFF !important; text-shadow: 0 0 10px rgba(56, 189, 248, 0.4); }
 
-    /* =========================================================================
-       5. UTILITY & TYPOGRAPHY
-       ========================================================================= */
     pre, code {
         background-color: rgba(30, 41, 59, 0.9) !important;
         color: #F87171 !important;
@@ -275,7 +258,6 @@ def render_app():
     }
     [data-testid="stSidebar"] { background-color: rgba(15, 23, 42, 0.95) !important; }
                 
-    /* Menargetkan tombol (button) yang spesifik */
     button[data-testid="stBaseButton-secondary"], 
     button[data-testid="stBaseButton-primary"] {
         background: linear-gradient(135deg, #38BDF8 0%, #0284C7 100%) !important;
@@ -290,15 +272,13 @@ def render_app():
         box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3) !important;
     }
 
-    /* Efek saat kursor diarahkan (Hover) */
     button[data-testid="stBaseButton-secondary"]:hover, 
     button[data-testid="stBaseButton-primary"]:hover {
         transform: translateY(-2px) !important;
         box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5) !important;
         background: linear-gradient(135deg, #7DD3FC 0%, #0369A1 100%) !important;
     }
-
-    /* Efek saat tombol diklik (Active) */
+    
     button[data-testid="stBaseButton-secondary"]:active {
         transform: translateY(0px) !important;
     }
@@ -307,21 +287,9 @@ def render_app():
         color: #FFFFFF !important; 
         font-weight: 700 !important;
     }
-
-    div[data-baseweb="select"] div[data-baseweb="tag"] {
-        background-color: #38BDF8 !important; 
-        color: #0F172A !important;           
-        font-weight: 600 !important;
-        border-radius: 6px !important;
-    }
-
     input {
         color: #FFFFFF !important;
         background-color: rgba(0, 0, 0, 0.2) !important;
-    }
-
-    div[data-testid="stMultiSelect"] span {
-        color: #0F172A !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -355,7 +323,7 @@ def render_app():
             """, unsafe_allow_html=True)
         keyword = st.text_input("🔍 Keyword Pencarian Baru", placeholder="Contoh: Inflasi Papua")
 
-        if st.button("🔥 Jalankan Scraping", width='stretch', type="primary"):
+        if st.button("🔥 Jalankan Scraping", use_container_width=True, type="primary"):
             if not keyword.strip():
                 st.warning("Masukkan keyword terlebih dahulu.")
             else:
@@ -385,9 +353,9 @@ def render_app():
 
         user_type = st.session_state.get("user_type", "unknown")
         if user_type == "umum":
-            st.info("👥 **User Umum**\n\nDashboard view-only mode")
+            st.info("👥 **User Only**\n\nDashboard view-only mode")
         elif user_type == "login":
-            st.success("🔐 **User Login**\n\nFull access including delete")
+            st.success("🔐 **Administrator**\n\nFull access including delete")
 
         st.markdown("### 🎛️ Filter Data Dashboard")
         
@@ -420,15 +388,19 @@ def render_app():
             start_date, end_date = None, None
 
         st.markdown("---")
-        if user_type == "login":
-            if st.session_state.get('role') == 'admin':
-                with st.popover("🗑 Hapus Seluruh Database", width='stretch'):
-                    st.warning("⚠️ Tindakan ini akan menghapus semua artikel dari database!")
-                    password_konfirmasi = st.text_input("Masukkan password akun Anda", type="password", key="del_pwd")
+        
+        # --- PERBAIKAN: Gunakan st.expander, BUKAN st.popover ---
+        if user_type == "login" and st.session_state.get('role') == 'admin':
+            with st.expander("🗑 Kelola Database"):
+                st.warning("⚠️ Tindakan ini menghapus semua data!")
+                with st.form("delete_form", clear_on_submit=True):
+                    password_konfirmasi = st.text_input("Password Admin:", type="password")
+                    # Ganti width='stretch' menjadi use_container_width=True
+                    submit_btn = st.form_submit_button("Konfirmasi Hapus Data", type="primary", use_container_width=True)
                     
-                    if st.button("Konfirmasi Hapus Data", type="primary", width='stretch'):
+                    if submit_btn:
                         password_login = st.session_state.get("saved_db_password", "")
-                        if password_konfirmasi == password_login: 
+                        if password_konfirmasi == password_login:
                             jumlah = hapus_semua_data_db()
                             if "active_keyword" in st.session_state:
                                 del st.session_state.active_keyword
@@ -436,11 +408,10 @@ def render_app():
                             st.rerun()
                         else:
                             st.error("❌ Password salah.")
-            else:
-                pass
-
+       
         st.markdown("---")
-        if st.button("🚪 Logout", width='stretch', type="secondary"):
+        # Ganti width='stretch' menjadi use_container_width=True
+        if st.button("🚪 Logout", use_container_width=True, type="secondary"):
             if "active_keyword" in st.session_state:
                 del st.session_state.active_keyword
             logout()
@@ -538,7 +509,6 @@ def render_app():
             
             st.divider()
 
-            # --- OFFICIAL GEMINI SYSTEM EXPANDER ---
             with st.expander("📝 Ringkasan Eksekutif Konten (Official Gemini Client)", expanded=True):
                 joined_default_keywords = ", ".join(active_keywords) if active_keywords else "Inflasi Papua"
                 
@@ -640,7 +610,7 @@ def render_app():
                                     data=bytes(pdf_bytes),
                                     file_name=f"Laporan_Analisis_{target_keyword}_{datetime.now().strftime('%Y%m%d')}.pdf",
                                     mime="application/pdf",
-                                    width='stretch'
+                                    use_container_width=True # Ganti width='stretch' menjadi use_container_width
                                 )
                         except Exception as pdf_err:
                             st.error(f"Sistem gagal menyiapkan cetakan PDF: {pdf_err}")
@@ -661,7 +631,6 @@ def render_app():
                         try:
                             from google import genai
                             
-                            # --- SISTEM ROTASI MULTI-API KEY AMAN ---
                             list_keys = st.secrets.get("GEMINI_API_KEYS", [])
                             if not list_keys:
                                 list_keys = [None]
@@ -776,7 +745,6 @@ def render_app():
                             list_errors = []
                             api_key_terpilih_log = "Default Environment"
 
-                            # Loop Iterasi Melintasi Array API Key Cadangan Anda
                             for idx, api_key in enumerate(list_keys):
                                 key_log = f"Key #{idx+1} ({api_key[:6]}...)" if api_key else "Default Env"
                                 try:
@@ -785,7 +753,6 @@ def render_app():
                                     else:
                                         client = genai.Client()
                                     
-                                    # Coba daftar model fallback satu per satu untuk API Key ini
                                     for model_name in daftar_model_fallback:
                                         try:
                                             response_stream = client.models.generate_content_stream(
@@ -860,13 +827,13 @@ def render_app():
                     hole=0.5
                 )
                 fig_sentimen = set_transparent_layout(fig_sentimen, "Distribusi Sentimen")
-                st.plotly_chart(fig_sentimen, width='stretch')
+                # Ganti width='stretch' menjadi use_container_width=True
+                st.plotly_chart(fig_sentimen, use_container_width=True)
 
             with col2:
                 top_10_m = filtered_df["media"].value_counts().head(10).reset_index()
                 top_10_m.columns = ["Media", "Jumlah"]
                 
-                # Sesuai perbaikan peringatan Seaborn/Plotly, penulisan diatur rapi
                 fig_media = px.bar(
                     top_10_m, 
                     x="Jumlah", 
@@ -879,7 +846,8 @@ def render_app():
                 fig_media.update_yaxes(showgrid=False) 
                 fig_media.update_xaxes(showgrid=False)
                 
-                st.plotly_chart(fig_media, width='stretch')
+                # Ganti width='stretch' menjadi use_container_width=True
+                st.plotly_chart(fig_media, use_container_width=True)
         else:
             st.info("Tidak ada data untuk grafik.")
 
@@ -888,7 +856,8 @@ def render_app():
         if len(filtered_df) > 0:
             display_df = filtered_df[["kata_kunci", "judul", "media", "waktu_tampilan", "Sentimen", "isi_konten"]].copy()
             display_df["waktu_tampilan"] = pd.to_datetime(display_df["waktu_tampilan"]).dt.strftime("%d %b %Y, %H:%M")
-            selected_rows = st.dataframe(display_df, width='stretch', hide_index=True, height=500, selection_mode="single-row", on_select="rerun")
+            # Ganti width='stretch' menjadi use_container_width=True
+            selected_rows = st.dataframe(display_df, use_container_width=True, hide_index=True, height=500, selection_mode="single-row", on_select="rerun")
             
             selected_row_index = selected_rows["selection"]["rows"]
             if selected_row_index:

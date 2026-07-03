@@ -51,6 +51,14 @@ def cek_autentikasi_manual():
 
     if "saved_db_password" not in st.session_state:
         st.session_state.saved_db_password = ""
+        
+    # 1. Inisialisasi awal untuk role
+    if "role" not in st.session_state:
+        st.session_state.role = None 
+
+    # 2. Paksa role menjadi 'admin' jika statusnya sudah login
+    if st.session_state.db_authenticated and st.session_state.user_type == "Admin":
+        st.session_state.role = "Admin"
 
     # kalau sudah login langsung keluar
     if st.session_state.db_authenticated:
