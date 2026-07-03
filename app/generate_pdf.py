@@ -41,7 +41,7 @@ def generate_pdf_report(filtered_df, insights, target_keyword, date_range_str, t
         top_10_m = filtered_df["media"].value_counts().head(10)
         
         fig, ax = plt.subplots(figsize=(6, 4))
-        sns.barplot(x=top_10_m.values, y=top_10_m.index, ax=ax, palette="Blues_r")
+        sns.barplot(x=top_10_m.values, y=top_10_m.index, ax=ax, hue=top_10_m.index, palette="Blues_r", legend=False)
         ax.set_title("Top 10 Media Kontributor", fontsize=12, fontweight='bold', pad=10)
         ax.set_xlabel("Jumlah Berita")
         plt.tight_layout()

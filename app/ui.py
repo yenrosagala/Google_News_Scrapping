@@ -6,7 +6,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from streamlit_plotly_events import plotly_events
 from googlenewsdecoder import gnewsdecoder
-import plotly.graph_objects as go
 
 from app.database import (
     cek_autentikasi_manual,
@@ -276,7 +275,6 @@ def render_app():
     }
     [data-testid="stSidebar"] { background-color: rgba(15, 23, 42, 0.95) !important; }
                 
-    
     /* Menargetkan tombol (button) yang spesifik */
     button[data-testid="stBaseButton-secondary"], 
     button[data-testid="stBaseButton-primary"] {
@@ -305,13 +303,11 @@ def render_app():
         transform: translateY(0px) !important;
     }
 
-    /* 1. Kontras untuk teks yang terpilih (Selected Value) di dalam Dropdown/Selectbox */
     div[data-baseweb="select"] span {
         color: #FFFFFF !important; 
         font-weight: 700 !important;
     }
 
-    /* 2. Warna background kotak untuk elemen yang terpilih agar menonjol */
     div[data-baseweb="select"] div[data-baseweb="tag"] {
         background-color: #38BDF8 !important; 
         color: #0F172A !important;           
@@ -319,17 +315,14 @@ def render_app():
         border-radius: 6px !important;
     }
 
-    /* 3. Menghilangkan warna putih bawaan pada input teks yang berisi nilai */
     input {
         color: #FFFFFF !important;
         background-color: rgba(0, 0, 0, 0.2) !important;
     }
 
-    /* 4. Jika menggunakan multiselect, pastikan tag tidak tenggelam */
     div[data-testid="stMultiSelect"] span {
         color: #0F172A !important;
     }
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -478,7 +471,7 @@ def render_app():
         total_berita, berita_dengan_isi, jumlah_media, jumlah_keyword = 0, 0, 0, 0
         filtered_df = pd.DataFrame()
 
-    kpi1, kpi2, kpi3= st.columns(3)
+    kpi1, kpi2, kpi3 = st.columns(3)
 
     with kpi1:
         st.markdown(f'<div class="kpi-box"><div class="kpi-label">📰 Total Berita</div><div class="kpi-value">{total_berita:,}</div></div>', unsafe_allow_html=True)
@@ -668,11 +661,10 @@ def render_app():
                         try:
                             from google import genai
                             
-                            # --- MODIFIKASI ROTASI MULTI-API KEY ---
-                            list_api_keys = st.secrets.get("GEMINI_API_KEYS", [])
-                            if not list_api_keys:
-                                # Jika list_api_keys kosong di secrets, fallback menggunakan default Client (None)
-                                list_api_keys = [None]
+                            # --- SISTEM ROTASI MULTI-API KEY AMAN ---
+                            list_keys = st.secrets.get("GEMINI_API_KEYS", [])
+                            if not list_keys:
+                                list_keys = [None]
                             
                             t_media = filtered_data['media'].value_counts().head(3)
                             t_media_str = ", ".join([f"{m} ({c} artikel)" for m, c in t_media.items()])
@@ -784,16 +776,14 @@ def render_app():
                             list_errors = []
                             api_key_terpilih_log = "Default Environment"
 
-                            # Loop untuk setiap API Key yang tersedia di Array
-                            for idx, api_key in enumerate(list_api_keys):
+                            # Loop Iterasi Melintasi Array API Key Cadangan Anda
+                            for idx, api_key in enumerate(list_keys):
+                                key_log = f"Key #{idx+1} ({api_key[:6]}...)" if api_key else "Default Env"
                                 try:
-                                    # Inisialisasi client secara dinamis dengan api_key saat ini
                                     if api_key:
                                         client = genai.Client(api_key=api_key)
-                                        key_log = f"Key #{idx+1} ({api_key[:6]}...)"
                                     else:
                                         client = genai.Client()
-                                        key_log = "Default Env"
                                     
                                     # Coba daftar model fallback satu per satu untuk API Key ini
                                     for model_name in daftar_model_fallback:
@@ -804,18 +794,17 @@ def render_app():
                                             )
                                             model_terpilih = model_name
                                             api_key_terpilih_log = key_log
-                                            break  # Sukses! Keluar dari loop model
-                                        except Exception as e:
-                                            list_errors.append(f"- **{model_name}** ({key_log}): {str(e)}")
+                                            break  
+                                        except Exception as model_e:
+                                            list_errors.append(f"- **{model_name}** ({key_log}) Error: {str(model_e)}")
                                             continue
                                     
-                                    # Jika berhasil mendapatkan stream respon dari salah satu model, keluar dari loop API Key
-                                    if response_stream:
+                                    if response_stream is not None:
                                         break
                                         
                                 except Exception as client_err:
-                                    list_errors.append(f"- Init Client Error ({key_log}): {str(client_err)}")
-                                    st.toast(f"🔄 API Key #{idx+1} bermasalah, berpindah ke key cadangan...", icon="⚠️")
+                                    list_errors.append(f"- Init Client Gagal ({key_log}): {str(client_err)}")
+                                    st.toast(f"🔄 API Key #{idx+1} bermasalah, mencoba key cadangan...", icon="⚠️")
                                     continue
 
                             if response_stream is None:
@@ -877,6 +866,7 @@ def render_app():
                 top_10_m = filtered_df["media"].value_counts().head(10).reset_index()
                 top_10_m.columns = ["Media", "Jumlah"]
                 
+                # Sesuai perbaikan peringatan Seaborn/Plotly, penulisan diatur rapi
                 fig_media = px.bar(
                     top_10_m, 
                     x="Jumlah", 

@@ -149,14 +149,6 @@ def install_playwright_browsers():
 install_playwright_browsers()
 
 
-# KODE YANG AMAN
-list_keys = st.secrets.get("GEMINI_API_KEYS", [])
-if list_keys and isinstance(list_keys, list):
-    # Mengambil key pertama sebagai default string untuk library lain jika butuh
-    os.environ["GEMINI_API_KEY"] = list_keys[0]
-
-# Sekarang Client() akan mendeteksinya tanpa masalah
-client = genai.Client()
 
 # Baru masukkan import library Anda yang lain di bawah ini
 import nltk
