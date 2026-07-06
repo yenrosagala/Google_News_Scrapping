@@ -109,11 +109,18 @@ class ScraperService:
             
         return articles
 
+        
     def execute_scraping_workflow(self, keyword: str, limit: int = 10) -> list:
         """Workflow utama yang dipanggil oleh halaman UI."""
         logger.info(f"Memulai workflow scraping untuk keyword: '{keyword}'")
         xml_data = self.fetch_google_news_rss(keyword)
         articles = self.parse_rss_data(xml_data, keyword=keyword, limit=limit)
+        
+        # Auto-Save ke DB sebelum di-return ke UI
+        if articles:
+            from app.services.database_service import db_service # Sesuaikan path import Anda
+            db_service.save_articles(articles)
+            
         return articles
 
 scraper_service = ScraperService()
