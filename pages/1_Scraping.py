@@ -7,6 +7,12 @@ from app.core.logger import setup_logger
 
 logger = setup_logger("page_scraping")
 
+try:
+    with open("app/assets/style.css") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+except FileNotFoundError:
+    logger.warning("File style.css tidak ditemukan di folder assets. Menggunakan style default.")
+
 st.title("📰 Scraper Engine")
 st.subheader("Cari dan Analisis Sentimen Berita Secara Real-Time")
 

@@ -1,142 +1,131 @@
 import pandas as pd
-import sqlite3  # Murni menggunakan sqlite3 standar bawaan Python
+from supabase import create_client, Client
 from app.core.logger import get_logger
-from app.database import dapatkan_koneksi_db, IS_POSTGRES  # Memanggil fungsi koneksi asli proyek Anda
+import streamlit as st
 
-logger = get_logger("DatabaseService")
+logger = get_logger("DatabaseAPIService")
 
 class DatabaseService:
     def __init__(self):
-        pass
+        # Ambil URL dan Anon Key otomatis dari secrets.toml untuk AUTO-READ & AUTO-WRITE (Scraper)
+        self.supabase_url = st.secrets.get("SUPABASE_URL", "https://qbqvtdhaktjbohyfwkvi.supabase.co")
+        self.default_api_key = st.secrets.get("SUPABASE_ANON_KEY", "")
 
-    def get_latest_scraped_data(self, limit: int = 50, fallback_mode: bool = False) -> pd.DataFrame:
-        """
-        [FITUR DASHBOARD] Membaca data berita terbaru secara dinamis.
-        Mendukung fallback_mode jika pencarian pertama tidak membuahkan hasil.
-        """
-        param_char = "%s" if IS_POSTGRES else "?"
-        
-        # Jika fallback_mode aktif, kita bisa melonggarkan query (contoh: mengambil data tanpa batasan status jika ada)
-        # Untuk saat ini, kita pastikan query mengambil ID terbesar secara mutlak sebagai 'last chance'
-        query = f"""
-            SELECT * FROM news_articles
-            ORDER BY id DESC
-            LIMIT {param_char}
-        """
-        
+    def _get_client(self, custom_api_key=None) -> Client:
+        """Helper internal untuk membuat HTTP Client Supabase secara dinamis"""
+        api_key = custom_api_key if custom_api_key else self.default_api_key
+        if not api_key:
+            raise ValueError("API Key Supabase tidak ditemukan di secrets.toml!")
+        return create_client(self.supabase_url, api_key)
+
+    def get_latest_scraped_data(self, limit: int = 50) -> pd.DataFrame:
+        """[OTOMATIS ON LOAD] Membaca data tanpa perlu input password manual di UI"""
         try:
-            # Membuka koneksi melalui fungsi database utama Anda
-            conn = dapatkan_koneksi_db()
-            df = pd.read_sql_query(query, conn, params=(limit,))
-            conn.close()
+            client = self._get_client()
+            response = client.table("news_articles")\
+                             .select("*")\
+                             .order("id", descending=True)\
+                             .limit(limit)\
+                             .execute()
             
-            if not df.empty:
-                # Normalisasi nama kolom ke lowercase terlebih dahulu untuk menghindari Case-Sensitive Bug
-                df.columns = [col.lower() for col in df.columns]
-
-                # Standarisasi nama kolom secara dinamis (Auto-Mapping) ke ekspektasi UI Streamlit
-                rename_dict = {}
-                if "keyword" in df.columns: rename_dict["keyword"] = "kata_kunci"
-                if "title" in df.columns: rename_dict["title"] = "judul"
-                if "source" in df.columns: rename_dict["source"] = "media"
-                if "published_date" in df.columns: rename_dict["published_date"] = "waktu_tampilan"
-                if "content" in df.columns: rename_dict["content"] = "isi_konten"
+            data = response.data
+            if not data:
+                return pd.DataFrame()
                 
-                # OPTIMASI POP-UP: Pastikan kolom 'url' dipertahankan ke UI Streamlit
-                # Jika ingin mengubah nama kolomnya menjadi 'url_bersih' di UI, aktifkan baris di bawah:
-                if "url" in df.columns: rename_dict["url"] = "url_bersih"
+            df = pd.DataFrame(data)
+            
+            # Standarisasi nama kolom database lama ke ekspektasi UI Streamlit Anda
+            rename_dict = {
+                "keyword": "kata_kunci",
+                "title": "judul",
+                "source": "media",
+                "published_date": "waktu_tampilan",
+                "content": "isi_konten",
+                "url": "url",
+                "sentiment": "Sentimen"
+            }
+            rename_dict = {k: v for k, v in rename_dict.items() if k in df.columns}
+            if rename_dict:
+                df = df.rename(columns=rename_dict)
                 
-                # SINKRONISASI: Pastikan kolom sentiment dari DB dipetakan ke 'Sentimen' (Kapital sesuai UI Anda)
-                if "sentiment" in df.columns: rename_dict["sentiment"] = "Sentimen"
-                
-                if rename_dict:
-                    df = df.rename(columns=rename_dict)
-                    
             return df
         except Exception as e:
-            logger.error(f"Gagal memuat data scraping {'(Fallback Mode)' if fallback_mode else ''}: {str(e)}")
+            logger.error(f"Gagal memuat data via REST API: {str(e)}")
             return pd.DataFrame()
 
-    def update_sentiment(self, article_id: str, new_sentiment: str) -> bool:
-        """[KEWENANGAN ADMIN] Mengubah label Sentimen secara manual di database."""
-        param_char = "%s" if IS_POSTGRES else "?"
-        
-        # SINKRONISASI: Gunakan 'sentiment' huruf kecil sesuai standar penamaan kolom DB umum,
-        # atau sesuaikan dengan skema tabel asli Anda (di sini saya asumsikan kolom DB-nya 'sentiment')
-        query = f"UPDATE news_articles SET sentiment = {param_char} WHERE id = {param_char}"
-        try:
-            conn = dapatkan_koneksi_db()
-            cursor = conn.cursor()
-            cursor.execute(query, (new_sentiment.upper(), article_id))
-            conn.commit()
-            rows_affected = cursor.rowcount
-            cursor.close()
-            conn.close()
-            return rows_affected > 0
-        except Exception as e:
-            logger.error(f"Admin gagal mengubah Sentimen untuk ID {article_id}: {str(e)}")
-            return False
-
-    def delete_article(self, article_id: str) -> bool:
-        """[KEWENANGAN ADMIN] Menghapus artikel berita berdasarkan ID dari database."""
-        param_char = "%s" if IS_POSTGRES else "?"
-        query = f"DELETE FROM news_articles WHERE id = {param_char}"
-        try:
-            conn = dapatkan_koneksi_db()
-            cursor = conn.cursor()
-            cursor.execute(query, (article_id,))
-            conn.commit()
-            rows_affected = cursor.rowcount
-            cursor.close()
-            conn.close()
-            return rows_affected > 0
-        except Exception as e:
-            logger.error(f"Admin gagal menghapus artikel ID {article_id}: {str(e)}")
-            return False
-        
-    
     def save_articles(self, articles: list) -> int:
-        """Menyimpan list artikel hasil scraping ke dalam database secara massal."""
+        """[OTOMATIS PASCA SCRAPING] Menyimpan hasil scraping via API upsert"""
         if not articles:
             return 0
             
-        param_char = "%s" if IS_POSTGRES else "?"
-        # Sesuaikan nama kolom di bawah dengan skema asli tabel DB Anda (gunakan lowercase)
-        query = f"""
-            INSERT INTO news_articles (id, title, url, source, published_date, content, sentiment, keyword)
-            VALUES ({param_char}, {param_char}, {param_char}, {param_char}, {param_char}, {param_char}, {param_char}, {param_char})
-            ON CONFLICT(id) DO NOTHING
-        """
-        saved_count = 0
         try:
-            conn = dapatkan_koneksi_db()
-            cursor = conn.cursor()
-            
+            client = self._get_client()
+            payload = []
             for art in articles:
-                try:
-                    cursor.execute(query, (
-                        art["id"],
-                        art["title"],
-                        art["url"],
-                        art["source"],
-                        art["published_date"],
-                        art["content"],
-                        art["sentiment"],
-                        art["keyword"]
-                    ))
-                    # Hitung data yang benar-benar masuk/berubah jika didukung driver
-                    saved_count += 1
-                except Exception as ins_err:
-                    logger.warning(f"Gagal menyimpan satu artikel ID {art['id']}: {str(ins_err)}")
-                    
-            conn.commit()
-            cursor.close()
-            conn.close()
-            logger.info(f"Berhasil menyimpan {saved_count} artikel baru ke database.")
-            return saved_count
+                payload.append({
+                    "id": art.get("id"),
+                    "title": art.get("title") or art.get("judul"),
+                    "url": art.get("url") or art.get("link"),
+                    "source": art.get("source") or art.get("media"),
+                    "published_date": str(art.get("published_date") or art.get("waktu_tampilan")),
+                    "content": art.get("content") or art.get("isi_konten"),
+                    "sentiment": art.get("sentiment", art.get("Sentimen", "NEUTRAL")).upper(),
+                    "keyword": art.get("keyword") or art.get("kata_kunci")
+                })
+            
+            # .upsert() otomatis mengabaikan atau mengupdate data jika ID sudah ada
+            response = client.table("news_articles").upsert(payload).execute()
+            return len(response.data) if response.data else 0
         except Exception as e:
-            logger.error(f"Gagal eksekusi save_articles ke database: {str(e)}")
+            logger.error(f"Scraper gagal menyimpan via REST API: {str(e)}")
             return 0
 
-# Inisialisasi Singleton objek global agar bisa langsung di-import halaman UI
+    # =========================================================
+    # MUTASI DATA (WAJIB USER INPUT SERVICE ROLE KEY SEBAGAI PASSWORD)
+    # =========================================================
+
+    def update_sentiment(self, article_id: str, new_sentiment: str, admin_api_key: str) -> bool:
+        """Mengubah label Sentimen menggunakan Service Role Key dari input user"""
+        try:
+            client = self._get_client(custom_api_key=admin_api_key)
+            response = client.table("news_articles")\
+                             .update({"sentiment": new_sentiment.upper()})\
+                             .eq("id", article_id)\
+                             .execute()
+            return len(response.data) > 0
+        except Exception as e:
+            st.error(f"❌ Otorisasi Gagal: 'Password' Service Key salah atau ditolak.")
+            return False
+
+    def delete_article(self, article_id: str, admin_api_key: str) -> bool:
+        """Menghapus artikel tunggal menggunakan Service Role Key dari input user"""
+        try:
+            client = self._get_client(custom_api_key=admin_api_key)
+            response = client.table("news_articles")\
+                             .delete()\
+                             .eq("id", article_id)\
+                             .execute()
+            return len(response.data) > 0
+        except Exception as e:
+            st.error(f"❌ Otorisasi Gagal: 'Password' Service Key salah atau ditolak.")
+            return False
+
+    def delete_articles_by_date(self, date_str: str, admin_api_key: str) -> bool:
+        """Menghapus artikel massal menggunakan Service Role Key dari input user"""
+        try:
+            client = self._get_client(custom_api_key=admin_api_key)
+            start_dt = f"{date_str}T00:00:00"
+            end_dt = f"{date_str}T23:59:59"
+            
+            response = client.table("news_articles")\
+                             .delete()\
+                             .gte("published_date", start_dt)\
+                             .lte("published_date", end_dt)\
+                             .execute()
+            return len(response.data) > 0
+        except Exception as e:
+            st.error(f"❌ Otorisasi Gagal: 'Password' Service Key salah atau ditolak.")
+            return False
+
+# Inisialisasi Singleton objek global
 db_service = DatabaseService()

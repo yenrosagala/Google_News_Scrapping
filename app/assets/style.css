@@ -1,149 +1,295 @@
-/* app/assets/style.css */
-.report-title {
-    font-size: 2.5rem;
-    font-weight: 700;
-    color: #1E3A8A;
-    margin-bottom: 1rem;
-}
-
-.metric-card {
-    background-color: #F3F4F6;
-    padding: 1.25rem;
-    border-radius: 0.5rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-}
-
-.sentiment-positive {
-    color: #10B981;
-    font-weight: bold;
-}
-
-.sentiment-negative {
-    color: #EF4444;
-    font-weight: bold;
-}
-
-/* app/assets/style.css */
-.report-card {
-    background-color: #f8f9fa;
-    padding: 20px;
-    border-radius: 8px;
-    border-left: 5px solid #007bff;
-    margin-bottom: 15px;
-}
-
-.sentiment-positive { color: #28a745; font-weight: bold; }
-.sentiment-negative { color: #dc3545; font-weight: bold; }
-
-
-    /* GLOBAL RESET & BACKGROUND */
+/* =========================================================
+   1. GLOBAL RESET & OVERLAY OPTIMIZATION
+   ========================================================= */
 html, body, .stApp {
-    background-color: #0F172A !important;
+    background-color: #090D16 !important; /* Warna fallback jika gambar gagal dimuat */
     background-image: 
-        radial-gradient(at 0% 0%, rgba(224, 242, 254, 0.15) 0px, transparent 50%),
+        linear-gradient(to bottom, rgba(9, 13, 22, 0.4), rgba(9, 13, 22, 0.75)), /* Lapisan peredam pendaran neon */
         url("https://cdn.jsdelivr.net/gh/yenrosagala/Google_News_Scrapping@main/5630939.jpg") !important;
     background-size: cover !important;
     background-attachment: fixed !important;
 }
+
 header, footer { visibility: hidden !important; }
 
-/* UI COMPONENTS (EXPANDER, DIALOG, CARDS) */
-details.st-emotion-cache-2sxnh6, summary.st-emotion-cache-ecoug0 {
-    background: rgba(15, 23, 42, 0.8) !important;
-    border: 1px solid rgba(255, 255, 255, 0.2) !important;
-    border-radius: 12px !important;
+/* =========================================================
+   2. CARD ISOLATION (Mencegah Garis Gambar Menembus Teks)
+   ========================================================= */
+.premium-card, .main-title, .kpi-box, div[data-testid="stForm"] {
+    /* Menggunakan Solid Charcoal Slate agar teks di atasnya 100% kontras */
+    background-color: #151F32 !important; 
+    border: 1px solid #243552 !important;
+    border-radius: 16px !important;
+    padding: 22px !important;
+    /* Efek kaca buram premium untuk menyamarkan wireframe di belakang kartu */
+    backdrop-filter: blur(12px) !important;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Hover effect pada kartu KPI */
+.kpi-box:hover { 
+    transform: translateY(-3px); 
+    border-color: #38BDF8 !important; 
+    box-shadow: 0 12px 30px -5px rgba(56, 189, 248, 0.2) !important;
+}
+
+/* =========================================================
+   3. TEXT CONTRAST ENHANCEMENT (Pewarnaan Teks)
+   ========================================================= */
+/* Judul dan sub-informasi di dalam kartu */
+h1, h2, h3, .kpi-value {
     color: #FFFFFF !important;
-}
-summary p { color: #F8FAFC !important; font-weight: 700 !important; }
-
-[data-testid="stExpanderDetails"] {
-    background-color: rgba(17, 24, 39, 0.95) !important; 
-    border: 2px solid #38BDF8 !important; 
-    padding: 20px !important;
-    border-radius: 0 0 12px 12px !important;
-}
-[data-testid="stExpanderDetails"] p, [data-testid="stExpanderDetails"] div { color: #F1F5F9 !important; }
-
-div[role="dialog"] { background-color: rgba(15, 23, 42, 0.98) !important; }
-div[role="dialog"] * { color: #FFFFFF !important; }
-
-.premium-card, .main-title, .kpi-box {
-    background: rgba(15, 23, 42, 0.85) !important;
-    border: 1px solid rgba(255, 255, 255, 0.1) !important;
-    border-radius: 20px !important;
-    padding: 20px !important;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important; /* Drop shadow pada teks agar menonjol */
 }
 
-label[data-testid="stWidgetLabel"] span { color: #38BDF8 !important; font-weight: 700 !important; }
+/* Teks paragraf, isi berita, dan deskripsi */
+p, li, span, label, [data-testid="stExpanderDetails"] p {
+    color: #E2E8F0 !important; /* Putih tulang tingkat kontras tinggi (rekomendasi W3C AAA) */
+    font-weight: 500 !important;
+}
 
-input[type="text"], input[type="password"], div[data-baseweb="select"] {
-    background-color: rgba(0, 0, 0, 0.3) !important;
+/* Label Widget Streamlit */
+label[data-testid="stWidgetLabel"] span { 
+    color: #38BDF8 !important; /* Cyan menyala khusus untuk judul input */
+    font-weight: 700 !important; 
+}
+
+.kpi-label { 
+    font-size: 0.8rem !important; 
+    color: #94A3B8 !important; /* Abu-abu kontras */
+    font-weight: 800; 
+    text-transform: uppercase; 
+    margin-bottom: 6px; 
+}
+
+/* =========================================================
+   4. INPUT COMPONENT CONTRAST (Kotak Input & Dropdown)
+   ========================================================= */
+input[type="text"], input[type="password"], div[data-baseweb="select"], input[type="number"] {
+    background-color: #0B0F19 !important; /* Hitam pekat agar ketikan teks putih terlihat kontras */
     color: #FFFFFF !important;
-    border: 1.5px solid #38BDF8 !important;
+    border: 1.5px solid #334155 !important;
     border-radius: 8px !important;
 }
 
-div[data-baseweb="tag"] {
-    background-color: #38BDF8 !important;
-    color: #0F172A !important;
-    font-weight: 600 !important;
-    border-radius: 6px !important;
-}
-
-.kpi-box {
-    backdrop-filter: blur(15px) !important;
-    text-align: center !important;
-    transition: all 0.3s ease !important;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
-}
-.kpi-box:hover { transform: translateY(-5px); border-color: rgba(56, 189, 248, 0.8) !important; }
-.kpi-label { font-size: 0.75rem !important; color: #94A3B8 !important; font-weight: 800; text-transform: uppercase; margin-bottom: 8px; }
-.kpi-value { font-size: 2.2rem !important; font-weight: 800; color: #FFFFFF !important; text-shadow: 0 0 10px rgba(56, 189, 248, 0.4); }
-
-pre, code {
-    background-color: rgba(30, 41, 59, 0.9) !important;
-    color: #F87171 !important;
-    border: 1px solid #475569 !important;
-    padding: 8px !important;
-    border-radius: 6px !important;
-}
-[data-testid="stAlert"] {
-    background-color: rgba(55, 65, 81, 0.6) !important;
-    border-left: 5px solid #F59E0B !important;
-    color: #A9A9A9 !important;
-}
-[data-testid="stSidebar"] { background-color: rgba(15, 23, 42, 0.95) !important; }
-            
-button[data-testid="stBaseButton-secondary"], 
-button[data-testid="stBaseButton-primary"] {
-    background: linear-gradient(135deg, #38BDF8 0%, #0284C7 100%) !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    border-radius: 10px !important;
-    padding: 10px 20px !important;
-    font-weight: 700 !important;
-    text-transform: uppercase !important;
-    letter-spacing: 1px !important;
-    transition: all 0.3s ease !important;
-    box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3) !important;
-}
-
-button[data-testid="stBaseButton-secondary"]:hover, 
-button[data-testid="stBaseButton-primary"]:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 6px 20px rgba(56, 189, 248, 0.5) !important;
-    background: linear-gradient(135deg, #7DD3FC 0%, #0369A1 100%) !important;
-}
-
-button[data-testid="stBaseButton-secondary"]:active {
-    transform: translateY(0px) !important;
+input[type="text"]:focus, div[data-baseweb="select"]:focus {
+    border-color: #38BDF8 !important;
 }
 
 div[data-baseweb="select"] span {
     color: #FFFFFF !important; 
     font-weight: 700 !important;
 }
-input {
+
+/* =========================================================
+   5. STREAMLIT STRIP TABS CONTROL
+   ========================================================= */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+    background-color: #151F32 !important;
+    padding: 6px;
+    border-radius: 10px;
+    border: 1px solid #243552 !important;
+}
+
+.stTabs [data-baseweb="tab"] {
+    background-color: #0B0F19 !important;
+    border: 1px solid #243552 !important;
+    color: #94A3B8 !important;
+    border-radius: 6px;
+    font-weight: 700 !important;
+    padding: 8px 16px !important;
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+    color: #38BDF8 !important;
+}
+
+.stTabs [data-baseweb="tab"][aria-selected="true"] {
+    background-color: #38BDF8 !important; 
+    color: #090D16 !important; /* Teks dibalik menjadi gelap saat tab aktif agar super jelas */
+    border-color: #38BDF8 !important;
+}
+
+/* Alert Box */
+[data-testid="stAlert"] {
+    background-color: #1E293B !important;
+    border-left: 5px solid #F59E0B !important;
+    color: #F8FAFC !important;
+}
+
+/* =========================================================
+   6. FORCE DARK MODE UNTUK STREAMLIT DATA FRAME GRID (TAB 3)
+   ========================================================= */
+div[data-testid="stDataFrame"] {
+    background-color: #151F32 !important;
+    border: 1px solid #243552 !important;
+    border-radius: 12px !important;
+    padding: 10px !important;
+}
+
+/* Memaksa elemen internal canvas dataframe mengikuti warna font kontras tinggi */
+div[data-testid="stDataFrame"] * {
     color: #FFFFFF !important;
-    background-color: rgba(0, 0, 0, 0.2) !important;
-    }
+}
+
+
+/* =========================================================
+   7. SIDEBAR CONTRAST ENHANCEMENT
+   ========================================================= */
+/* Latar belakang sidebar disamakan dengan warna kartu (Solid Charcoal Slate) */
+[data-testid="stSidebar"] {
+    background-color: #151F32 !important; 
+    border-right: 1px solid #243552 !important;
+}
+
+/* Memastikan teks judul di sidebar berwarna putih terang */
+[data-testid="stSidebar"] h1, 
+[data-testid="stSidebar"] h2, 
+[data-testid="stSidebar"] h3 {
+    color: #ffffff !important;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Memastikan teks paragraf dan span di sidebar berwarna putih tulang (high contrast) */
+[data-testid="stSidebar"] p, 
+[data-testid="stSidebar"] span, 
+[data-testid="stSidebar"] div {
+    color: #202224 !important;
+    font-weight: 500 !important;
+}
+
+/* Warna label widget khusus di sidebar dibuat cyan menyala */
+[data-testid="stSidebar"] label[data-testid="stWidgetLabel"] span {
+    color: #38BDF8 !important;
+    font-weight: 700 !important;
+}
+
+/* Memperbaiki kontras input box jika ada di sidebar */
+[data-testid="stSidebar"] input[type="text"], 
+[data-testid="stSidebar"] input[type="number"], 
+[data-testid="stSidebar"] div[data-baseweb="select"] {
+    background-color: #0B0F19 !important;
+    color: #FFFFFF !important;
+    border: 1.5px solid #334155 !important;
+}
+
+/* =========================================================
+   8. PLACEHOLDER / UNSELECTED TEXT COLOR
+   ========================================================= */
+/* Mengubah warna teks sebelum dipilih/diketik pada dropdown dan input */
+::placeholder,
+input::placeholder,
+textarea::placeholder,
+div[data-baseweb="select"] input::placeholder {
+    color: #94A3B8 !important; /* Warna abu-abu redup agar terlihat sebagai placeholder */
+    opacity: 1 !important;
+    font-weight: 400 !important;
+}
+
+/* Memastikan teks yang SUDAH dipilih tetap putih dan tebal */
+div[data-baseweb="select"] span {
+    color: #FFFFFF !important; 
+    font-weight: 700 !important;
+}
+
+/* =========================================================
+   9. CUSTOM STATUS ELEMENT (NEUTRAL)
+   ========================================================= */
+.st-emotion-cache-qiev7j.e1bi6yfx1 {
+    color: #94A3B8 !important; /* Warna abu-abu redup, BUKAN putih */
+    font-weight: 600 !important;
+}
+
+/* =========================================================
+   10. ST METRIC (KPI BOX) CUSTOMIZATION
+   ========================================================= */
+/* Membuat pembungkus metric menjadi bentuk box/kartu */
+[data-testid="stMetric"] {
+    background-color: #151F32 !important; /* Warna dasar kartu */
+    border: 1px solid #243552 !important; /* Garis pinggir tipis */
+    border-radius: 12px !important; /* Ujung melengkung */
+    padding: 20px 15px !important; /* Jarak ruang ke dalam */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4) !important; /* Efek bayangan */
+    
+    /* Memaksa elemen di dalamnya berada di tengah */
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    
+    /* Animasi transisi halus saat di-hover */
+    transition: all 0.3s ease-in-out !important;
+}
+
+/* Efek menyala saat KPI Box dilewati mouse (Hover) */
+[data-testid="stMetric"]:hover {
+    transform: translateY(-3px) !important; 
+    border-color: #38BDF8 !important; 
+    box-shadow: 0 8px 20px -5px rgba(56, 189, 248, 0.3) !important;
+}
+
+/* Mengatur label teks (misal: "Total Berita Terfilter") */
+[data-testid="stMetricLabel"] {
+    justify-content: center !important;
+    width: 100% !important;
+    margin-bottom: 8px !important;
+}
+
+[data-testid="stMetricLabel"] p {
+    color: #94A3B8 !important; /* Warna teks abu-abu redup agar angka lebih menonjol */
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+}
+
+/* Mengatur angka valuenya (misal: "4") */
+[data-testid="stMetricValue"] {
+    color: #FFFFFF !important; /* Putih terang untuk visibilitas maksimal */
+    font-size: 2.5rem !important; /* Ukuran angka diperbesar */
+    font-weight: 800 !important;
+    text-align: center !important;
+    width: 100% !important;
+}
+
+/* Memastikan markdown di dalam metric mengikuti rata tengah */
+[data-testid="stMetric"] [data-testid="stMarkdownContainer"] {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+/* =========================================================
+   11. SIDEBAR NAVIGATION LINKS (Menu Halaman)
+   ========================================================= */
+/* 1. Warna teks default untuk menu halaman yang TIDAK aktif */
+[data-testid="stSidebarNavLink"] span,
+[data-testid="stSidebarNavLink"] p {
+    color: #94A3B8 !important; /* Warna abu-abu redup */
+    font-weight: 600 !important;
+    transition: all 0.2s ease-in-out !important;
+}
+
+/* 2. Efek saat menu dilewati mouse (Hover) */
+[data-testid="stSidebarNavLink"]:hover {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-radius: 8px !important;
+}
+
+[data-testid="stSidebarNavLink"]:hover span,
+[data-testid="stSidebarNavLink"]:hover p {
+    color: #FFFFFF !important; /* Berubah jadi putih terang saat di-hover */
+}
+
+/* 3. Gaya khusus untuk halaman yang SEDANG AKTIF (terbuka) */
+[data-testid="stSidebarNavLink"][aria-current="page"] {
+    background-color: rgba(56, 189, 248, 0.1) !important; /* Highlight tipis background cyan */
+    border-radius: 8px !important;
+    border-left: 4px solid #38BDF8 !important; /* Garis penanda di sebelah kiri */
+}
+
+[data-testid="stSidebarNavLink"][aria-current="page"] span,
+[data-testid="stSidebarNavLink"][aria-current="page"] p {
+    color: #38BDF8 !important; /* Teks cyan menyala untuk halaman aktif */
+    font-weight: 800 !important;
+}
