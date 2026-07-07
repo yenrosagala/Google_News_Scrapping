@@ -293,3 +293,73 @@ div[data-baseweb="select"] span {
     color: #38BDF8 !important; /* Teks cyan menyala untuk halaman aktif */
     font-weight: 800 !important;
 }
+
+/* =========================================================
+   11. POP UP DETAIL BERITA
+   ========================================================= */
+   /* CSS untuk mempercantik Dialog / Pop-up Detail Berita */
+
+/* 1. Styling Utama Dialog (Pop-up) */
+[role="dialog"] {
+    border-radius: 12px !important;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15) !important;
+}
+
+/* 2. Header Dialog (Judul "Detail Berita") */
+[role="dialog"] [data-testid="stMarkdownContainer"] p {
+    font-size: 1.25rem !important;
+    font-weight: 700 !important;
+    color: #1f2937;
+    margin: 0 !important;
+}
+
+/* 3. Judul Artikel di dalam Dialog (H3) */
+[role="dialog"] h3 {
+    font-size: 1.6rem !important;
+    color: #111827 !important;
+    line-height: 1.4 !important;
+    margin-bottom: 0.5rem !important;
+}
+
+/* 4. Metadata (Tanggal & Sentimen) */
+[role="dialog"] [data-testid="stCaptionContainer"] {
+    background-color: #f3f4f6;
+    padding: 8px 12px;
+    border-radius: 6px;
+    display: inline-block;
+    margin-bottom: 1rem !important;
+}
+
+[role="dialog"] [data-testid="stCaptionContainer"] p {
+    color: #4b5563 !important;
+    font-size: 0.9rem !important;
+}
+
+/* 5. Konten Artikel (Body) agar nyaman dibaca */
+[role="dialog"] [data-testid="stMarkdownContainer"] p {
+    font-size: 1.1rem !important;
+    color: #374151 !important;
+    line-height: 1.7 !important;
+    text-align: justify; /* Membuat teks rapi seperti majalah */
+    margin-bottom: 1.2rem !important;
+}
+
+/* 6. Tombol Tutup */
+[role="dialog"] [data-testid="stBaseButton-secondary"] {
+    background-color: #ffffff !important;
+    border: 1px solid #d1d5db !important;
+    border-radius: 6px !important;
+    transition: all 0.2s;
+}
+
+[role="dialog"] [data-testid="stBaseButton-secondary"]:hover {
+    background-color: #f9fafb !important;
+    border-color: #9ca3af !important;
+}
+
+/* 7. Scrollbar yang lebih rapi untuk isi berita */
+[role="dialog"] .stVerticalBlock {
+    max-height: 70vh !important;
+    overflow-y: auto !important;
+    padding-right: 10px;
+}

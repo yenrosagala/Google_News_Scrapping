@@ -1,30 +1,30 @@
-# app/services/sentiment_service.py
-from app.core.config import get_config
+from sklearn.feature_extraction.text import TfidfVectorizer
 from app.core.logger import setup_logger
 
 logger = setup_logger("sentiment_service")
-config = get_config()
 
 class SentimentService:
     def __init__(self):
-        # Di sini tempat inisialisasi model (misal IndoBERT)
-        # Kita buat lazy loading agar aplikasi tidak berat di awal
-        self.model = None 
-        logger.info("SentimentService initialized.")
+        self.positif_lexicon = ['untung', 'naik', 'positif', 'laba', 'stabil', 'bagus', 'tumbuh', 'maju', 'berhasil', 'suplai', 'cukup']
+        self.negatif_lexicon = ['rugi', 'turun', 'negatif', 'inflasi', 'mahal', 'sulit', 'krisis', 'buruk', 'gagal', 'kurang', 'langka']
+        logger.info("SentimentService initialized with TF-IDF.")
 
     def analyze_text(self, text: str) -> str:
-        """Menganalisis teks dan mengembalikan label: Positive, Neutral, atau Negative."""
-        if not text or len(text.strip()) == 0:
-            return "Neutral"
-            
+        if not text or len(text.strip()) < 50: return "Neutral"
         try:
-            # TODO: Integrasikan dengan model/pipeline asli dari app/sentiment.py Anda
-            # Contoh simulasi logic sementara:
-            # prediction = self.model(text)
-            return "Positive" 
-        except Exception as e:
-            logger.error(f"Error during sentiment analysis: {e}")
+            vectorizer = TfidfVectorizer(stop_words='english') 
+            tfidf_matrix = vectorizer.fit_transform([text.lower()])
+            feature_names = vectorizer.get_feature_names_out()
+            scores = tfidf_matrix.toarray()[0]
+            
+            word_weights = dict(zip(feature_names, scores))
+            total_score = sum(weight for word, weight in word_weights.items() if word in self.positif_lexicon) - \
+                          sum(weight for word, weight in word_weights.items() if word in self.negatif_lexicon)
+            
+            if total_score > 0.02: return "POSITIVE"
+            elif total_score < -0.02: return "NEGATIVE"
+            return "NEUTRAL"
+        except:
             return "Neutral"
 
-# Singleton instance
 sentiment_service = SentimentService()

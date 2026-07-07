@@ -21,3 +21,4 @@ seaborn
 lxml
 pysqlcipher3
 supabase
+scikit-learn

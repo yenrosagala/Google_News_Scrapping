@@ -1,18 +1,24 @@
 import streamlit as st
-from app.core.config import PAGE_TITLE, PAGE_ICON, LAYOUT
+from app.core.config import Config
 from app.core.logger import get_logger
 from app.utils.session import init_state
+from app.utils.session import init_session_state
 
 # 1. Setup Logger
 logger = get_logger("MainApp")
 logger.info("Aplikasi Google News Scrapper berhasil dimuat.")
+# streamlit_app.py
+# Gantikan logika state_manager dengan ini:
+def init_app_state():
+    init_session_state("authenticated", False)
+    init_session_state("role", "user")
+    init_session_state("current_keyword", "")
+    init_session_state("is_scrapped", False)
 
-# 2. Terapkan Page Config dari Core Config
-st.set_page_config(
-    page_title=PAGE_TITLE,
-    page_icon=PAGE_ICON,
-    layout=LAYOUT
-)
+init_app_state()
+
+# 2. Konfigurasi Halaman Streamlit
+st.set_page_config(page_title=Config.PAGE_TITLE, page_icon=Config.PAGE_ICON, layout=Config.LAYOUT)
 
 # 3. Inject CSS Eksternal
 try:

@@ -45,16 +45,3 @@ if submit_button:
                 st.warning("Tidak ada berita yang ditemukan atau gagal melakukan parsing.")
 
 st.divider()
-
-# =========================================================
-# PREVIEW DATA TERAKHIR DARI DATABASE (BUKAN MEMORI/SCRAPING ULANG)
-# =========================================================
-st.write("### 📂 Data Hasil Scraping Terakhir di Database")
-
-# Ambil data rilisan terakhir secara instan dari DB (Limit 10 atau sesuai kebutuhan)
-df_preview = db_service.get_latest_scraped_data(limit=10)
-
-if not df_preview.empty:
-    st.dataframe(df_preview, width='stretch')
-else:
-    st.info("💡 Belum ada data hasil scraping di dalam database. Silakan masukkan keyword di atas untuk memulai.")
