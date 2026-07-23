@@ -46,56 +46,128 @@ class ScraperService:
             logger.error(f"Gagal mengambil RSS: {e}")
             return ""
 
-    def _scrape_article(self, url: str) -> Optional[Dict]:
+    def _scrape_article(
+        self,
+        url_google_news: str,
+        judul_feed: str,
+        fallback_text: str = ""
+    ) -> Dict:
         """
-        Mengambil isi berita menggunakan newspaper4k.
+        Ekstrak teks artikel penuh menggunakan Newspaper4k.
         """
 
+        judul_final = judul_feed
+        isi = ""
+        url_target = url_google_news or ""
+        article = None
+
+        # Decode URL Google News
         try:
-            article = Article(
-                url=url,
-                language="id",
-                browser_user_agent=(
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/138.0 Safari/537.36"
-                ),
+            decoded_url = gnewsdecoder(
+                url_google_news,
+                interval=1,
+                proxy=None
             )
 
-            article.download()
-            article.parse()
-
-            # Membuat ringkasan apabila memungkinkan
-            try:
-                article.nlp()
-                summary = article.summary
-                keywords = article.keywords
-            except Exception:
-                summary = ""
-                keywords = []
-
-            return {
-                "title": article.title,
-                "text": article.text,
-                "summary": summary,
-                "authors": article.authors,
-                "publish_date": article.publish_date,
-                "top_image": article.top_image,
-                "keywords": keywords,
-            }
+            if decoded_url.get("status"):
+                url_target = decoded_url["decoded_url"]
 
         except Exception as e:
-            logger.warning(f"Gagal scraping artikel {url}: {e}")
-            return None
+            logger.error(f"Gagal decode URL Google News: {e}")
+
+        # Menghindari URL ganda
+        if "https" in url_target and url_target.count("https://") > 1:
+            url_target = "https://" + url_target.split("https://")[-1]
+
+        try:
+            response = self.scraper.get(
+                url_target,
+                headers=HTTP_HEADERS,
+                timeout=12
+            )
+
+            if response.status_code == 200:
+
+                html_text = response.text
+
+                # =============================
+                # Parsing HTML manual
+                # =============================
+                teks_html = ekstrak_teks_dari_html(html_text)
+
+                if len(teks_html.strip()) >= 200:
+                    isi = teks_html.strip()
+
+                # =============================
+                # Newspaper4k menggunakan HTML
+                # =============================
+                if not isi:
+
+                    article = Article(
+                        url_target,
+                        language="id",
+                        config=NEWSPAPER_CONFIG
+                    )
+
+                    article.set_html(html_text)
+                    article.parse()
+
+                    if article.text and len(article.text.strip()) >= 150:
+                        isi = article.text.strip()
+
+                # =============================
+                # Fallback download Newspaper4k
+                # =============================
+                if not isi:
+
+                    article = Article(
+                        url_target,
+                        language="id",
+                        config=NEWSPAPER_CONFIG
+                    )
+
+                    article.download()
+                    article.parse()
+
+                    if article.text and len(article.text.strip()) >= 150:
+                        isi = article.text.strip()
+
+                # Update judul apabila Newspaper memperoleh judul yang lebih baik
+                if (
+                    article
+                    and article.title
+                    and "Google" not in article.title
+                ):
+                    judul_final = article.title
+
+        except Exception as e:
+            logger.warning(
+                f"Newspaper4k gagal mengekstrak artikel {url_target}: {e}"
+            )
+
+        # =============================
+        # Fallback ke deskripsi RSS
+        # =============================
+        if len(isi.strip()) < 200:
+
+            fallback = bersihkan_teks_html(fallback_text)
+
+            if len(fallback) >= 200:
+                isi = fallback
+            else:
+                isi = ""
+
+        return {
+            "judul": judul_final,
+            "isi_konten": isi,
+            "url_target": url_target,
+        }
 
     def _process_single_article(
         self,
         item: ET.Element,
-        keyword: str,
+        keyword: str
     ) -> Optional[Dict]:
-        """
-        Memproses satu artikel.
-        """
 
         try:
             link = item.findtext("link")
@@ -103,47 +175,28 @@ class ScraperService:
             if not link:
                 return None
 
-            rss_title = item.findtext("title")
-            rss_source = item.findtext("source")
-            rss_date = item.findtext("pubDate")
+            judul_feed = item.findtext("title", "")
+            fallback_text = item.findtext("description", "")
 
-            # ===========================
-            # Scraping isi artikel
-            # ===========================
-            article = self._scrape_article(link)
+            hasil = self._scrape_article(
+                url_google_news=link,
+                judul_feed=judul_feed,
+                fallback_text=fallback_text
+            )
 
-            if article is None:
+            if not hasil["isi_konten"]:
                 return None
 
-            # ===========================
-            # AI Analysis
-            # ===========================
-            ai_result = self.ai.analyze_text(
-                title=article["title"],
-                content=article["text"],
-            )
-
-            summary = (
-                ai_result.get("summary")
-                if ai_result
-                else article["summary"]
-            )
-
-            sentiment = sentiment_service.analyze(article["text"])
-
             return {
-                "title": article["title"] or rss_title,
-                "url": link,
-                "source": rss_source,
-                "published_date": (
-                    article["publish_date"] or rss_date
-                ),
+                "title": hasil["judul"],
+                "url": hasil["url_target"],
+                "source": item.findtext("source"),
+                "published_date": item.findtext("pubDate"),
                 "keyword": keyword,
-                "content": article["text"],
-                "summary": summary,
-                "sentiment": sentiment,
-                "authors": ", ".join(article["authors"]),
-                "top_image": article["top_image"],
+                "content": hasil["isi_konten"],
+                "sentiment": sentiment_service.analyze(
+                    hasil["isi_konten"]
+                )
             }
 
         except Exception as e:
@@ -151,7 +204,7 @@ class ScraperService:
                 f"Gagal memproses artikel {item.findtext('title')}: {e}"
             )
             return None
-
+            
     def execute_scraping_workflow(
         self,
         keyword: str,
