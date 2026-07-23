@@ -18,3 +18,7 @@ google-genai
 fpdf2
 matplotlib
 seaborn
+lxml
+pysqlcipher3
+supabase
+scikit-learn
