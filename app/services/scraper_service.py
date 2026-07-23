@@ -4,6 +4,7 @@ import concurrent.futures
 from typing import Optional, List, Dict
 
 import cloudscraper
+from googlenewsdecoder import gnewsdecoder
 from newspaper import Article
 
 from app.core.logger import get_logger
