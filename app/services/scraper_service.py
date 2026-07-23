@@ -11,8 +11,13 @@ from app.core.logger import get_logger
 from app.services.ai_service import AIService
 from app.services.sentiment_service import sentiment_service
 from app.services.database_service import DatabaseService
+import re
 
 logger = get_logger("ScraperService")
+
+HTTP_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
 
 
 class ScraperService:
@@ -48,6 +53,10 @@ class ScraperService:
         except requests.RequestException as e:
             logger.error(f"Gagal mengambil RSS: {e}")
             return ""
+    
+    def bersihkan_teks_html(text: str) -> str:
+        clean = re.sub('<.*?>', '', text)
+        return clean
 
     def _scrape_article(
     self,
