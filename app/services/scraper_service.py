@@ -42,7 +42,7 @@ class ScraperService:
             if not link: return None
 
             # Analisis (Simulasi call ke AI Service yang sudah direfaktor)
-            ai_result = AIService.analyze_content(link) 
+            ai_result = AIService.analyze_article(link) 
             
             return {
                 "title": title,
