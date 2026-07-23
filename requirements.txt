@@ -19,6 +19,6 @@ fpdf2
 matplotlib
 seaborn
 lxml
-pysqlcipher3
+sqlcipher3-wheels
 supabase
 scikit-learn
